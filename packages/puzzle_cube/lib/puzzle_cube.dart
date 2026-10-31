@@ -1,7 +1,7 @@
 /// An interactive 3D twisty-puzzle cube for Flutter: a pure-Dart 3x3 model with
 /// layer turns, scrambling, validation and solved-state detection, plus a
-/// gesture-driven [Cube] widget (orbit, tap-to-select and drag-to-turn) built
-/// on the `ditredi` renderer.
+/// gesture-driven [Cube] widget (orbit, tap-to-select and drag-to-turn) drawn
+/// by the lit [RealisticCubeRenderer] (vendored fork for rubik-app).
 library;
 
 export 'src/models/cube_color_validator.dart';
