@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:puzzle_cube/puzzle_cube.dart';
@@ -8,13 +7,12 @@ import 'cube_facelets.dart';
 
 /// Sticker-level hit testing for puzzle_cube's `Cube` widget.
 ///
-/// puzzle_cube only reports which *face* was tapped, so this reproduces the
-/// projection DiTreDi uses (perspective, y/z flip, fit-to-viewport scale) to
-/// find the exact facelet under a tap.
+/// puzzle_cube only reports which *face* was tapped, so this uses the widget's
+/// projection (perspective, y/z flip, [cubeViewScale]) and the shared cube
+/// geometry to find the exact facelet under a tap.
 abstract final class StickerHitTest {
-  static const double _spacing = 2.2; // cubie centre spacing
-  static const double _half = 3.2; // outer half-extent (2.2 + 1)
-  static const double _cellHalf = 1.0; // half size of a cubie face
+  static const double _spacing = kCubeSpacing;
+  static const double _cellHalf = kCubieHalf;
 
   /// Index (0..53, cuber facelet order) of the front-most sticker under [tap],
   /// or null if the tap misses the cube.
@@ -77,11 +75,8 @@ abstract final class StickerHitTest {
       ..rotateX(rotX)
       ..rotateY(rotY);
 
-    // DiTreDi fits the *unrotated* model's bounding box to the viewport.
-    // The box spans the cubie bodies (±3.2) plus the sticker planes, which sit
-    // 0.01 proud of the bodies: spread = 2 * 3.21.
-    const spread = 2 * (_half + 0.01);
-    final scale = math.min(size.width, size.height) / 2 / spread;
+    // Same fit-to-viewport scale as the Cube widget.
+    final scale = cubeViewScale(size);
 
     final projection = Matrix4.identity()
       ..setEntry(3, 2, -0.001)

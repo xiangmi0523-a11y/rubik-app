@@ -7,6 +7,7 @@ import 'package:vector_math/vector_math_64.dart' show Matrix4, Vector3;
 import '../models/cube_move.dart';
 import '../models/cubie_model.dart';
 import '../models/puzzle_cube_state.dart';
+import '../rendering/cube_geometry.dart';
 import '../rendering/cube_hit_test.dart';
 import '../rendering/realistic_cube_renderer.dart';
 
@@ -207,7 +208,7 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
   _MovePlan? _activePlan;
 
   // ── Drag-to-turn state ──────────────────────────────
-  static const double _kDecidePx = 8;
+  static const double _kDecidePx = 12;
   static const double _kSnapThreshold = math.pi / 4;
   static const double _kMaxAngle = math.pi / 2 + 0.45;
 
@@ -544,10 +545,9 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
 }
 
 /// Pixels per model unit used by the [Cube] widget (and its hit tests): the
-/// cube's model extent (±3.21 including stickers) fitted to the viewport,
-/// exactly as the original DiTreDi renderer did.
+/// cube's model extent ([kCubeFitSpread]) fitted to the viewport.
 double cubeViewScale(Size size) =>
-    size.isEmpty ? 0 : math.min(size.width, size.height) / 2 / 6.42;
+    size.isEmpty ? 0 : math.min(size.width, size.height) / 2 / kCubeFitSpread;
 
 /// Draws the cube with [RealisticCubeRenderer] using the same projection as
 /// the hit tests: perspective · scale(s, -s, -s) · view · slice.
@@ -565,7 +565,6 @@ class _CubePainter extends CustomPainter {
   final bool Function(CubieModel) inSlice;
 
   static final _renderer = RealisticCubeRenderer();
-  static const _spacing = 2.2;
 
   static final _faces = <(CubieFace, Vector3, Vector3, Vector3)>[
     (CubieFace.xPos, Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)),
@@ -586,6 +585,23 @@ class _CubePainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
 
+    // A turning layer splits the cube into slabs along the turn axis; drawing
+    // them slab by slab (back to front) keeps them from cutting into each
+    // other mid-turn.
+    final sliceCubies = cubies.where(inSlice).toList();
+    int? sliceAxis;
+    int? sliceLayer;
+    if (sliceCubies.isNotEmpty) {
+      for (final axis in const [0, 1, 2]) {
+        final values = sliceCubies.map((c) => _coord(c, axis)).toSet();
+        if (values.length == 1) {
+          sliceAxis = axis;
+          sliceLayer = values.first;
+          break;
+        }
+      }
+    }
+
     final draws = <CubieDraw>[];
     for (final cubie in cubies) {
       final model =
@@ -598,13 +614,15 @@ class _CubePainter extends CustomPainter {
       }
 
       final center = Vector3(
-        cubie.x * _spacing,
-        cubie.y * _spacing,
-        cubie.z * _spacing,
+        cubie.x * kCubeSpacing,
+        cubie.y * kCubeSpacing,
+        cubie.z * kCubeSpacing,
       );
       final faces = <CubieFaceDraw>[];
-      for (final (face, n, u, v) in _faces) {
-        final faceCenter = center + n;
+      for (final (face, n, u0, v0) in _faces) {
+        final faceCenter = center + n * kCubieHalf;
+        final u = u0 * kCubieHalf;
+        final v = v0 * kCubieHalf;
         final eyeCenter = eye.transform3(Vector3.copy(faceCenter));
         final eyeNormal = eye.rotated3(Vector3.copy(n))..normalize();
         if (eyeNormal.dot(camera - eyeCenter) <= 0) continue; // back face
@@ -620,11 +638,27 @@ class _CubePainter extends CustomPainter {
       draws.add(
         CubieDraw(
           depth: eye.transform3(Vector3.copy(center)).z,
+          group: _groupOf(cubie, sliceAxis, sliceLayer),
           faces: faces,
         ),
       );
     }
-    _renderer.paint(canvas, size, draws, extent: 3.2 * scale * 1.15);
+    _renderer.paint(
+      canvas,
+      size,
+      draws,
+      extent: kCubeHalfExtent * scale * 1.15,
+    );
+  }
+
+  static int _coord(CubieModel c, int axis) =>
+      axis == 0 ? c.x : (axis == 1 ? c.y : c.z);
+
+  /// Slab index along the turn axis (-1 below, 0 the turning layer, 1 above),
+  /// or 0 for everything when nothing turns.
+  static int _groupOf(CubieModel c, int? axis, int? layer) {
+    if (axis == null || layer == null) return 0;
+    return (_coord(c, axis) - layer).sign;
   }
 
   @override

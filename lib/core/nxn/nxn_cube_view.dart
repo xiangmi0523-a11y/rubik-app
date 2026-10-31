@@ -26,7 +26,8 @@ enum _Mode { none, deciding, orbiting, turning }
 
 class _NxnCubeViewState extends State<NxnCubeView>
     with SingleTickerProviderStateMixin {
-  static const _decidePx = 8.0;
+  static const _decidePx = 12.0;
+  static const _edgeGrabPx = 16.0;
   static const _orbitSpeed = 0.01;
 
   late final AnimationController _snap = AnimationController(
@@ -94,39 +95,58 @@ class _NxnCubeViewState extends State<NxnCubeView>
   }
 
   /// Picks the layer to turn for a drag that started at [start].
+  ///
+  /// The swipe is decomposed into the grabbed face's two in-plane axes (in
+  /// world units). Moving along one axis turns the layer about the other.
+  /// Unlike comparing screen angles, this stays right on steeply
+  /// foreshortened faces, where both axes point almost the same way on screen.
   bool _beginTurn(Offset start, Offset total) {
     final proj = _projection();
-    final hit = nxnHitTest(_c.state, proj, start);
+    final hit = nxnHitTest(_c.state, proj, start, tolerance: _edgeGrabPx);
     if (hit == null) return false;
 
     final normalAxis = hit.normal.$1 != 0 ? 0 : (hit.normal.$2 != 0 ? 1 : 2);
     final grab = NxnProjection.cubieCenter(hit.pos) +
         NxnProjection.vec(hit.normal) * 0.5;
     final grabScreen = proj.project(grab);
+    final inPlane = [0, 1, 2]..remove(normalAxis);
 
-    var bestScore = -1.0;
-    for (final axis in [0, 1, 2]) {
-      if (axis == normalAxis) continue;
-      const eps = 0.01;
-      final rot = switch (axis) {
-        0 => Matrix4.rotationX(eps),
-        1 => Matrix4.rotationY(eps),
-        _ => Matrix4.rotationZ(eps),
-      };
-      final moved = proj.project(rot.transform3(Vector3.copy(grab)));
-      final tangent = (moved - grabScreen) / eps;
-      if (tangent.distance < 1e-3) continue;
-      final score = (total.dx * tangent.dx + total.dy * tangent.dy).abs() /
-          tangent.distance;
-      if (score > bestScore) {
-        bestScore = score;
-        _axis = axis;
-        _layer = axisOf(hit.pos, axis);
-        _tangent = tangent;
-      }
+    Offset screenDir(int axis) {
+      final unit = Vector3.zero()..[axis] = 0.01;
+      return (proj.project(grab + unit) - grabScreen) / 0.01;
     }
+
+    final a = inPlane[0];
+    final b = inPlane[1];
+    final dirA = screenDir(a);
+    final dirB = screenDir(b);
+    final det = dirA.dx * dirB.dy - dirA.dy * dirB.dx;
+    double alongA;
+    double alongB;
+    if (det.abs() > 1e-6) {
+      alongA = (total.dx * dirB.dy - total.dy * dirB.dx) / det;
+      alongB = (dirA.dx * total.dy - dirA.dy * total.dx) / det;
+    } else {
+      alongA = (total.dx * dirA.dx + total.dy * dirA.dy) / dirA.distance;
+      alongB = (total.dx * dirB.dx + total.dy * dirB.dy) / dirB.distance;
+    }
+    // Swiping along A turns the layer about B, and vice versa.
+    final axis = alongA.abs() >= alongB.abs() ? b : a;
+
+    const eps = 0.01;
+    final rot = switch (axis) {
+      0 => Matrix4.rotationX(eps),
+      1 => Matrix4.rotationY(eps),
+      _ => Matrix4.rotationZ(eps),
+    };
+    final tangent =
+        (proj.project(rot.transform3(Vector3.copy(grab))) - grabScreen) / eps;
+    if (tangent.distance < 1e-3) return false;
+    _axis = axis;
+    _layer = axisOf(hit.pos, axis);
+    _tangent = tangent;
     _angle = 0;
-    return bestScore >= 0;
+    return true;
   }
 
   void _onPanEnd(DragEndDetails d) {

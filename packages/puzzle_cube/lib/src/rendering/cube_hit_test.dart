@@ -3,9 +3,14 @@ import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 import '../models/cube_move.dart';
 import '../models/cubie_model.dart';
+import 'cube_geometry.dart';
 
-/// Outer half-extent of the cube in model space (cubie centre 2.2 + body 1).
-const double _half = 3.2;
+/// Outer half-extent of the cube in model space.
+const double _half = kCubeHalfExtent;
+
+/// A drag may start this many pixels outside the cube and still grab the
+/// nearest edge sticker (instead of orbiting the whole cube).
+const double kEdgeGrabTolerancePx = 16;
 
 /// The six outer faces as (cube face, 4 model-space corners in cyclic order).
 final List<(CubieFace, List<Vector3>)> _faces = [
@@ -195,13 +200,23 @@ CubeDrag? cubeDragFor({
     return v.z;
   }
 
-  // Front-most 3x3 sticker cell under `start`.
+  // Front-most 3x3 sticker cell under `start`; if the touch is just outside
+  // the cube, the nearest visible cell within [kEdgeGrabTolerancePx].
   ({int normal, int sign, int cp, int cq, int p, int q})? best;
   var bestDepth = double.negativeInfinity;
+  ({int normal, int sign, int cp, int cq, int p, int q})? nearest;
+  var nearestDist = kEdgeGrabTolerancePx;
 
   for (final (normal, sign) in const [
     (0, 1), (0, -1), (1, 1), (1, -1), (2, 1), (2, -1),
   ]) {
+    // Skip faces turned away from the viewer.
+    final faceCenter = Vector3.zero();
+    _setAxis(faceCenter, normal, sign * _half);
+    final outward = Vector3.copy(faceCenter);
+    _addAxis(outward, normal, sign * 1.0);
+    if (depthOf(outward) <= depthOf(faceCenter)) continue;
+
     final inPlane = [0, 1, 2]..remove(normal);
     final p = inPlane[0];
     final q = inPlane[1];
@@ -215,18 +230,26 @@ CubeDrag? cubeDragFor({
           _setAxis(v, q, cq * _cellSpan + dq * _cellHalf);
           corners.add(v);
         }
-        if (_pointInPolygon(start, corners.map(project).toList())) {
+        final poly = corners.map(project).toList();
+        final cell = (normal: normal, sign: sign, cp: cp, cq: cq, p: p, q: q);
+        if (_pointInPolygon(start, poly)) {
           final depth =
               corners.map(depthOf).reduce((a, b) => a + b) / corners.length;
           if (depth > bestDepth) {
             bestDepth = depth;
-            best = (normal: normal, sign: sign, cp: cp, cq: cq, p: p, q: q);
+            best = cell;
+          }
+        } else {
+          final d = _distanceToPolygon(start, poly);
+          if (d < nearestDist) {
+            nearestDist = d;
+            nearest = cell;
           }
         }
       }
     }
   }
-  final cell = best;
+  final cell = best ?? nearest;
   if (cell == null) return null;
 
   // Grab point = the cell centre on the cube surface.
@@ -242,8 +265,21 @@ CubeDrag? cubeDragFor({
     return project(p2) - grabScreen;
   }
 
-  final alongP = _dot(delta, _normalize(axisScreenDir(cell.p)));
-  final alongQ = _dot(delta, _normalize(axisScreenDir(cell.q)));
+  // Decompose the swipe into the face's two in-plane axes (in model units),
+  // which stays correct on steeply foreshortened faces where the screen
+  // directions of the two axes are nearly parallel.
+  final dirP = axisScreenDir(cell.p);
+  final dirQ = axisScreenDir(cell.q);
+  final det = dirP.dx * dirQ.dy - dirP.dy * dirQ.dx;
+  double alongP;
+  double alongQ;
+  if (det.abs() > 1e-6) {
+    alongP = (delta.dx * dirQ.dy - delta.dy * dirQ.dx) / det;
+    alongQ = (dirP.dx * delta.dy - dirP.dy * delta.dx) / det;
+  } else {
+    alongP = _dot(delta, _normalize(dirP));
+    alongQ = _dot(delta, _normalize(dirQ));
+  }
 
   // Swipe runs along the dominant in-plane axis; the layer turns about the
   // other in-plane axis, at the grabbed cubie's coordinate.
@@ -297,4 +333,21 @@ double _dot(Offset a, Offset b) => a.dx * b.dx + a.dy * b.dy;
 Offset _normalize(Offset o) {
   final d = o.distance;
   return d == 0 ? Offset.zero : Offset(o.dx / d, o.dy / d);
+}
+
+/// Distance from [p] to the boundary of [poly] (0 if inside).
+double _distanceToPolygon(Offset p, List<Offset> poly) {
+  var best = double.infinity;
+  for (var i = 0; i < poly.length; i++) {
+    final a = poly[i];
+    final b = poly[(i + 1) % poly.length];
+    final ab = b - a;
+    final len2 = ab.distanceSquared;
+    final t = len2 == 0
+        ? 0.0
+        : (((p - a).dx * ab.dx + (p - a).dy * ab.dy) / len2).clamp(0.0, 1.0);
+    final d = (p - (a + ab * t)).distance;
+    if (d < best) best = d;
+  }
+  return best;
 }

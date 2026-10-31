@@ -91,10 +91,19 @@ class NxnStickerHit {
   final IVec normal;
 }
 
-/// Front-most outer sticker under [point], or null.
-NxnStickerHit? nxnHitTest(NxnCubeState state, NxnProjection proj, Offset point) {
+/// Front-most outer sticker under [point]. If [tolerance] > 0 and the point
+/// is just outside the cube, returns the nearest visible sticker within that
+/// many pixels (so grabbing an edge sticker doesn't orbit the cube instead).
+NxnStickerHit? nxnHitTest(
+  NxnCubeState state,
+  NxnProjection proj,
+  Offset point, {
+  double tolerance = 0,
+}) {
   NxnStickerHit? best;
   var bestDepth = double.negativeInfinity;
+  NxnStickerHit? nearest;
+  var nearestDist = tolerance;
   for (final c in state.cubies) {
     final center = NxnProjection.cubieCenter(c.pos);
     for (final normal in c.stickers.keys) {
@@ -106,11 +115,34 @@ NxnStickerHit? nxnHitTest(NxnCubeState state, NxnProjection proj, Offset point) 
       final quad = NxnProjection.square(faceCenter, normal, 0.5)
           .map(proj.project)
           .toList();
-      if (_inside(point, quad) && vc.z > bestDepth) {
-        bestDepth = vc.z;
-        best = NxnStickerHit(c.pos, normal);
+      if (_inside(point, quad)) {
+        if (vc.z > bestDepth) {
+          bestDepth = vc.z;
+          best = NxnStickerHit(c.pos, normal);
+        }
+      } else if (tolerance > 0) {
+        final d = _distanceToPolygon(point, quad);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearest = NxnStickerHit(c.pos, normal);
+        }
       }
     }
+  }
+  return best ?? nearest;
+}
+
+double _distanceToPolygon(Offset p, List<Offset> poly) {
+  var best = double.infinity;
+  for (var i = 0; i < poly.length; i++) {
+    final a = poly[i];
+    final ab = poly[(i + 1) % poly.length] - a;
+    final len2 = ab.distanceSquared;
+    final t = len2 == 0
+        ? 0.0
+        : (((p - a).dx * ab.dx + (p - a).dy * ab.dy) / len2).clamp(0.0, 1.0);
+    final d = (p - (a + ab * t)).distance;
+    if (d < best) best = d;
   }
   return best;
 }

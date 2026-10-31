@@ -69,6 +69,8 @@ class NxnCubePainter extends CustomPainter {
       if (faces.isEmpty) continue;
       draws.add(CubieDraw(
         depth: proj.toView(world(Vector3.copy(center))).z,
+        // Slabs along the turn axis are drawn as rigid blocks, back to front.
+        group: turn == null ? 0 : (axisOf(c.pos, turn.axis) - turn.layer).sign,
         faces: faces,
       ));
     }

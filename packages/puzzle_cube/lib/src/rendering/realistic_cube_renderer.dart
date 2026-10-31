@@ -26,10 +26,15 @@ class CubieFaceDraw {
 /// A cubie: its visible faces and a depth for back-to-front sorting.
 class CubieDraw {
   /// Creates a cubie draw.
-  const CubieDraw({required this.depth, required this.faces});
+  const CubieDraw({required this.depth, required this.faces, this.group = 0});
 
   /// Larger = nearer to the viewer.
   final double depth;
+
+  /// Cubies in the same group form one rigid convex block (e.g. the slabs on
+  /// either side of a turning layer). Groups are drawn back to front as a
+  /// whole, so a turning layer never cuts through the rest of the cube.
+  final int group;
 
   /// Faces turned towards the viewer.
   final List<CubieFaceDraw> faces;
@@ -40,9 +45,9 @@ class CubeRenderStyle {
   /// Creates a style.
   const CubeRenderStyle({
     this.bodyColor = const Color(0xFF1B1B1E),
-    this.stickerInset = 0.86,
-    this.stickerRadius = 0.22,
-    this.bodyRadius = 0.16,
+    this.stickerInset = 0.85,
+    this.stickerRadius = 0.26,
+    this.bodyRadius = 0.06,
     this.shadow = true,
   });
 
@@ -84,7 +89,21 @@ class RealisticCubeRenderer {
   void paint(Canvas canvas, Size size, List<CubieDraw> cubies,
       {double? extent,}) {
     if (style.shadow) _paintShadow(canvas, size, extent);
-    final sorted = [...cubies]..sort((a, b) => a.depth.compareTo(b.depth));
+    // Average depth per group, then back-to-front within each group.
+    final sums = <int, double>{};
+    final counts = <int, int>{};
+    for (final c in cubies) {
+      sums[c.group] = (sums[c.group] ?? 0) + c.depth;
+      counts[c.group] = (counts[c.group] ?? 0) + 1;
+    }
+    double groupDepth(int g) => sums[g]! / counts[g]!;
+    final sorted = [...cubies]
+      ..sort((a, b) {
+        if (a.group != b.group) {
+          return groupDepth(a.group).compareTo(groupDepth(b.group));
+        }
+        return a.depth.compareTo(b.depth);
+      });
     for (final cubie in sorted) {
       for (final face in cubie.faces) {
         _paintFace(canvas, face);
@@ -117,23 +136,21 @@ class RealisticCubeRenderer {
   }
 
   void _paintFace(Canvas canvas, CubieFaceDraw face) {
-    // Plastic body: rounded square, slightly smaller than the cell so the
-    // cubie seams read as thin dark grooves.
-    final body = _roundedRect(face.at, 0.985, style.bodyRadius);
+    // Plastic body: fills the whole cell so neighbouring cubies touch; the
+    // seam between them is a hairline groove, like a real speed cube.
+    final body = _roundedRect(face.at, 1.0, style.bodyRadius);
     canvas.drawPath(
       body,
       Paint()
         ..color =
-            _shade(style.bodyColor, face.normal, spec: 0.25, shininess: 18),
+            _shade(style.bodyColor, face.normal, spec: 0.3, shininess: 16),
     );
-    // Thin rim light along the body edge.
     canvas.drawPath(
       body,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.8
-        ..color = Colors.white
-            .withValues(alpha: 0.05 + 0.10 * _diffuseTerm(face.normal)),
+        ..strokeWidth = 0.9
+        ..color = Colors.black.withValues(alpha: 0.9),
     );
 
     final color = face.sticker;
