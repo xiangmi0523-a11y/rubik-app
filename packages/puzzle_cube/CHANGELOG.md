@@ -44,3 +44,5 @@
   drag-to-turn hit tests behave exactly as before.
 - Exported `RealisticCubeRenderer`, `CubieDraw`, `CubieFaceDraw`,
   `CubeRenderStyle` and `cubeViewScale` for reuse by other puzzles.
+- `CubeController.moveDuration` is now mutable and is re-read before every
+  animated turn, so the app's player can switch between 1×, 2× and 4×.

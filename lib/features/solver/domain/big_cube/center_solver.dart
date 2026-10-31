@@ -74,33 +74,38 @@ abstract final class CenterOrbitSolver {
         return SolveFailure(SolveFailureKind.timeout, '$label超时');
       }
 
-      final t = unsolved.first;
-      final need = scheme.faceColors[f.faceOf[t]];
-      final sources = [for (final s in unsolved) if (s != t && colors[s] == need) s];
-      if (sources.isEmpty) {
-        return internal('找不到 ${faceNames[f.faceOf[t]]} 面需要的$label');
-      }
-
-      // Best (s, x): most stickers solved afterwards, then shortest formula.
+      // Best (s → t → x) over every unsolved t: most stickers solved
+      // afterwards, then shortest formula. Each candidate solves t, so the
+      // gain is at least 1 and no solved slot is broken.
       List<int>? best;
       var bestGain = -1 << 30;
-      for (final s in sources) {
-        for (final x in centres) {
-          if (x == s || x == t) continue;
-          final xSolved = solved(colors, x);
-          final xAfter = colors[t] == scheme.faceColors[f.faceOf[x]];
-          if (xSolved && !xAfter) continue; // would break a solved slot
-          final sAfter = colors[x] == scheme.faceColors[f.faceOf[s]];
-          final gain = 1 + (xAfter ? 1 : 0) + (sAfter ? 1 : 0) - (xSolved ? 1 : 0);
-          final seq = library.cycleIds(s, t, x);
-          if (gain > bestGain ||
-              (gain == bestGain && seq.length < best!.length)) {
-            bestGain = gain;
-            best = seq;
+      var bestT = -1;
+      for (final t in unsolved) {
+        final need = scheme.faceColors[f.faceOf[t]];
+        for (final s in unsolved) {
+          if (s == t || colors[s] != need) continue;
+          for (final x in centres) {
+            if (x == s || x == t) continue;
+            final xSolved = solved(colors, x);
+            final xAfter = colors[t] == scheme.faceColors[f.faceOf[x]];
+            if (xSolved && !xAfter) continue; // would break a solved slot
+            final sAfter = colors[x] == scheme.faceColors[f.faceOf[s]];
+            final gain =
+                1 + (xAfter ? 1 : 0) + (sAfter ? 1 : 0) - (xSolved ? 1 : 0);
+            final seq = library.cycleIds(s, t, x);
+            if (gain > bestGain ||
+                (gain == bestGain && seq.length < best!.length)) {
+              bestGain = gain;
+              best = seq;
+              bestT = t;
+            }
           }
         }
       }
-      if (best == null) return internal('找不到可用的$label循环');
+      if (best == null) {
+        return internal('找不到 ${faceNames[f.faceOf[unsolved.first]]} 面可用的$label循环');
+      }
+      final t = bestT;
 
       // Apply to the real engine, then check the step did what it should.
       final before = colors;
