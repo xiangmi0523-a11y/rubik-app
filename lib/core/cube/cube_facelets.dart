@@ -24,8 +24,8 @@ class StickerRef {
 
 /// Maps the 54 facelets (cuber string order U1..U9 R1..R9 F1..F9 D1..D9 L1..L9
 /// B1..B9, each face read row by row as seen from outside) onto puzzle_cube's
-/// cubie coordinates. puzzle_cube: U = y-1, D = y+1, R = x+1, L = x-1,
-/// F = z+1, B = z-1.
+/// cubie coordinates, matching what puzzle_cube actually renders with the app
+/// camera: U = +y (white), F = +x (green), R = +z (red), D = -y, B = -x, L = -z.
 abstract final class CubeFacelets {
   static const _Vec _up = (0, 1, 0);
   static const _Vec _down = (0, -1, 0);
