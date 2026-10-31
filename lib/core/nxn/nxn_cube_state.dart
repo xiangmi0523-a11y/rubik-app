@@ -35,6 +35,25 @@ class NxnMove {
 
   NxnMove get inverse => NxnMove(axis, layer, turns == 2 ? 2 : -turns);
 
+  /// Parses SiGN notation for an order-[n] cube: R, U', F2, 2R, 3U2, ...
+  factory NxnMove.parse(String text, int n) {
+    final m = RegExp(r"^(\d?)([RLUDFB])(2|')?$").firstMatch(text.trim());
+    if (m == null) throw ArgumentError('Invalid move: $text');
+    final depth = m[1]!.isEmpty ? 1 : int.parse(m[1]!);
+    final face = m[2]!;
+    final positive = 'RUF'.contains(face);
+    final axis = 'RL'.contains(face) ? 0 : ('UD'.contains(face) ? 1 : 2);
+    final layer = positive ? (n - 1) - 2 * (depth - 1) : -(n - 1) + 2 * (depth - 1);
+    final clockwise = positive ? -1 : 1;
+    final turns = m[3] == '2' ? 2 : (m[3] == "'" ? -clockwise : clockwise);
+    return NxnMove(axis, layer, turns);
+  }
+
+  static List<NxnMove> parseAll(String text, int n) => [
+        for (final t in text.split(RegExp(r'\s+')))
+          if (t.isNotEmpty) NxnMove.parse(t, n),
+      ];
+
   /// Standard (SiGN) notation for an order-[n] cube, e.g. R, U', 2R, F2.
   String notation(int n) {
     final positive = layer >= 0;

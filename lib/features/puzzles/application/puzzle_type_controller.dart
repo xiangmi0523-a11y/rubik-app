@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/nxn/nxn_cube_controller.dart';
+import '../../../core/pyraminx/pyraminx_controller.dart';
 import '../../../core/prefs/shared_prefs_provider.dart';
 import '../domain/puzzle_type.dart';
 
@@ -25,6 +26,13 @@ final puzzleTypeProvider =
 /// One N×N cube per order, kept alive so switching puzzles keeps their state.
 final nxnCubeProvider = Provider.family<NxnCubeController, int>((ref, n) {
   final controller = NxnCubeController(n);
+  ref.onDispose(controller.dispose);
+  return controller;
+});
+
+/// The free-play Pyraminx.
+final pyraminxProvider = Provider<PyraminxController>((ref) {
+  final controller = PyraminxController();
   ref.onDispose(controller.dispose);
   return controller;
 });

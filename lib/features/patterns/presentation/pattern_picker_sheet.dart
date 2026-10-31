@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:puzzle_cube/puzzle_cube.dart';
 
-import '../../../core/cube/cube_facelets.dart';
-import '../../solver/domain/solve_result.dart';
-import '../../solver/presentation/solution_page.dart';
+import '../../../core/nxn/nxn_cube_controller.dart';
+import '../../../core/nxn/nxn_cube_view.dart';
+import '../../../core/pyraminx/pyraminx_controller.dart';
+import '../../../core/pyraminx/pyraminx_view.dart';
+import '../../player/presentation/player_page.dart';
+import '../../puzzles/domain/puzzle_type.dart';
 import '../domain/cube_pattern.dart';
+import '../domain/pattern_scripts.dart';
 
-/// Bottom sheet listing the built-in patterns; picking one opens the animated
-/// tutorial.
-Future<void> showPatternPicker(BuildContext context) {
+/// Bottom sheet listing the patterns of [type]; picking one opens the
+/// animated tutorial.
+Future<void> showPatternPicker(BuildContext context, PuzzleType type) {
+  final patterns = patternsFor(type);
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -22,7 +26,7 @@ Future<void> showPatternPicker(BuildContext context) {
         controller: scroll,
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
-          Text('花式魔方',
+          Text('${type.label}花式',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
@@ -30,20 +34,41 @@ Future<void> showPatternPicker(BuildContext context) {
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white70)),
           const SizedBox(height: 12),
-          for (final pattern in cubePatterns)
+          for (final pattern in patterns)
             Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(10),
-                leading: PatternThumbnail(definition: pattern.definition),
-                title: Text(pattern.name),
-                subtitle: Text(
-                  '${pattern.description}\n${pattern.moves.length} 步：${pattern.algorithm}',
-                ),
-                isThreeLine: true,
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   openPatternDemo(context, pattern);
                 },
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      PatternPreview(pattern: pattern, size: 76),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(pattern.name,
+                                style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text(pattern.description,
+                                style: const TextStyle(color: Colors.white70)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${pattern.moves.length} 步：${pattern.algorithm}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.white54),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
         ],
@@ -52,21 +77,18 @@ Future<void> showPatternPicker(BuildContext context) {
   );
 }
 
-void openPatternDemo(BuildContext context, CubePattern pattern) {
+void openPatternDemo(BuildContext context, PuzzlePattern pattern) {
   Navigator.of(context).push(
     MaterialPageRoute(
-      builder: (_) => SolutionPage(
-        title: '花式：${pattern.name}',
+      builder: (_) => PlayerPage(
+        title: '${pattern.puzzle.label}花式：${pattern.name}',
         startText: '从还原状态开始',
-        result: SolveResult(
-          colors: CubeFacelets.read(PuzzleCubeState.solved()),
-          moves: pattern.moves,
-        ),
+        script: patternScript(pattern),
         header: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Row(
             children: [
-              PatternThumbnail(definition: pattern.definition, size: 56),
+              PatternPreview(pattern: pattern, size: 64),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -82,41 +104,47 @@ void openPatternDemo(BuildContext context, CubePattern pattern) {
   );
 }
 
-/// Flat preview of the pattern's front (F) face.
-class PatternThumbnail extends StatelessWidget {
-  const PatternThumbnail({super.key, required this.definition, this.size = 48});
+/// Small static 3D render of the finished pattern.
+class PatternPreview extends StatefulWidget {
+  const PatternPreview({super.key, required this.pattern, this.size = 64});
 
-  final String definition;
+  final PuzzlePattern pattern;
   final double size;
 
   @override
+  State<PatternPreview> createState() => _PatternPreviewState();
+}
+
+class _PatternPreviewState extends State<PatternPreview> {
+  NxnCubeController? _cube;
+  PyraminxController? _pyraminx;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.pattern;
+    if (p.puzzle == PuzzleType.pyraminx) {
+      _pyraminx = PyraminxController(initial: pyraminxPatternState(p));
+    } else {
+      _cube = NxnCubeController(p.puzzle.order!, initial: cubePatternState(p));
+    }
+  }
+
+  @override
+  void dispose() {
+    _cube?.dispose();
+    _pyraminx?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final centers = CubeFacelets.centerColors;
-    Color colorOf(String letter) => centers[CubeSide.values
-        .firstWhere((s) => s.letter == letter)]!;
-    final start = CubeSide.f.index * 9;
-    return SizedBox.square(
-      dimension: size,
-      child: Column(
-        children: [
-          for (var r = 0; r < 3; r++)
-            Expanded(
-              child: Row(
-                children: [
-                  for (var c = 0; c < 3; c++)
-                    Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.all(1),
-                        decoration: BoxDecoration(
-                          color: colorOf(definition[start + r * 3 + c]),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
+    return IgnorePointer(
+      child: SizedBox.square(
+        dimension: widget.size,
+        child: _cube != null
+            ? NxnCubeView(controller: _cube!)
+            : PyraminxView(controller: _pyraminx!),
       ),
     );
   }

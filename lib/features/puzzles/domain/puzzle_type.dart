@@ -18,11 +18,7 @@ enum PuzzleType {
   /// 3x3 uses puzzle_cube + cuber; 2x2/4x4/5x5 use the in-house N×N engine.
   bool get usesNxnEngine => order != null && this != PuzzleType.cube3;
 
-  /// Only the 3x3 has a solver and pattern tutorials so far.
-  bool get hasPatterns => this == PuzzleType.cube3;
-
-  /// No 3D model yet: physical-puzzle timing only.
-  bool get isPlaceholder => this == PuzzleType.pyraminx;
+  bool get isPyraminx => this == PuzzleType.pyraminx;
 
   static PuzzleType fromId(String? id) => PuzzleType.values.firstWhere(
         (t) => t.id == id,

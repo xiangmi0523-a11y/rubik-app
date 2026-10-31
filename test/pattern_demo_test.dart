@@ -1,47 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rubik_app/core/cube/cube_facelets.dart';
-import 'package:rubik_app/features/patterns/domain/cube_pattern.dart';
+import 'package:rubik_app/core/nxn/nxn_cube_view.dart';
+import 'package:rubik_app/core/pyraminx/pyraminx_view.dart';
 import 'package:rubik_app/features/patterns/presentation/pattern_picker_sheet.dart';
-import 'package:rubik_app/features/solver/application/playback_controller.dart';
-import 'package:rubik_app/features/solver/presentation/solution_page.dart';
+import 'package:rubik_app/features/player/application/player_controller.dart';
+import 'package:rubik_app/features/player/presentation/player_page.dart';
+import 'package:rubik_app/features/puzzles/domain/puzzle_type.dart';
 
-void main() {
-  testWidgets('picking a pattern plays it to the pattern state',
-      (tester) async {
-    tester.view.physicalSize = const Size(390, 844) * 3;
-    tester.view.devicePixelRatio = 3;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(ProviderScope(
-      child: MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () => showPatternPicker(context),
-                child: const Text('open'),
-              ),
+Future<void> _open(WidgetTester tester, PuzzleType type, String name) async {
+  tester.view.physicalSize = const Size(390, 844) * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(ProviderScope(
+    child: MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => showPatternPicker(context, type),
+              child: const Text('open'),
             ),
           ),
         ),
       ),
-    ));
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('棋盘格'));
-    await tester.pumpAndSettle();
-    expect(find.text('花式：棋盘格'), findsOneWidget);
+    ),
+  ));
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(name));
+  await tester.pumpAndSettle();
+}
 
-    final page = tester.widget<SolutionPage>(find.byType(SolutionPage));
-    final container =
-        ProviderScope.containerOf(tester.element(find.byType(SolutionPage)));
-    await tester.tap(find.byIcon(Icons.play_arrow));
-    for (var i = 0; i < 200; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    final cube = container.read(playbackCubeProvider(page.result));
-    expect(CubeFacelets.definitionOf(cube.state),
-        cubePatterns.first.definition);
-  });
+Future<void> _playToEnd(WidgetTester tester) async {
+  await tester.tap(find.byIcon(Icons.play_arrow));
+  for (var i = 0; i < 300; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+void main() {
+  for (final (type, name) in [
+    (PuzzleType.cube3, '棋盘格'),
+    (PuzzleType.cube4, '六面回字'),
+    (PuzzleType.cube5, '棋盘格'),
+    (PuzzleType.cube2, '六面条纹'),
+    (PuzzleType.pyraminx, '花朵'),
+  ]) {
+    testWidgets('${type.label} pattern "$name" plays to the end',
+        (tester) async {
+      await _open(tester, type, name);
+      expect(find.text('${type.label}花式：$name'), findsOneWidget);
+      if (type.usesNxnEngine) expect(find.byType(NxnCubeView), findsWidgets);
+      if (type.isPyraminx) expect(find.byType(PyraminxView), findsWidgets);
+
+      final page = tester.widget<PlayerPage>(find.byType(PlayerPage));
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(PlayerPage)));
+      await _playToEnd(tester);
+      final state = container.read(playerControllerProvider(page.script));
+      expect(state.index, page.script.moves.length);
+      expect(state.playing, isFalse);
+    });
+  }
 }

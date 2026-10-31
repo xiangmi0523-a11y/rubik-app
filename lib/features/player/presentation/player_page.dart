@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:puzzle_cube/puzzle_cube.dart';
 
-import '../application/playback_controller.dart';
-import '../domain/solve_result.dart';
+import '../application/player_controller.dart';
+import '../domain/puzzle_stepper.dart';
 
-class SolutionPage extends ConsumerWidget {
-  const SolutionPage({
+/// Plays a [PlayerScript] (solution or pattern) on any puzzle, step by step.
+class PlayerPage extends ConsumerWidget {
+  const PlayerPage({
     super.key,
-    required this.result,
+    required this.script,
     this.title,
     this.header,
     this.startText = '准备开始',
   });
 
-  final SolveResult result;
+  final PlayerScript script;
 
   /// App-bar title; defaults to "还原步骤（N 步）".
   final String? title;
@@ -25,11 +25,11 @@ class SolutionPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final provider = playbackControllerProvider(result);
+    final provider = playerControllerProvider(script);
     final playback = ref.watch(provider);
     final notifier = ref.read(provider.notifier);
-    final cube = ref.watch(playbackCubeProvider(result));
-    final moves = result.moves;
+    final stepper = ref.watch(playerStepperProvider(script));
+    final moves = script.moves;
     final total = moves.length;
 
     return Scaffold(
@@ -52,7 +52,7 @@ class SolutionPage extends ConsumerWidget {
             if (playback.index < total)
               Text('下一步：${moves[playback.index]}',
                   style: const TextStyle(color: Colors.white70)),
-            Expanded(child: Cube(controller: cube)),
+            Expanded(child: stepper.buildView()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Wrap(

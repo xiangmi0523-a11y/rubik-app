@@ -11,12 +11,24 @@ import 'nxn_projection.dart';
 /// Interactive n×n cube: drag on the cube turns the grabbed layer (follows the
 /// finger, snaps to the nearest quarter/half turn); drag off it orbits.
 class NxnCubeView extends StatefulWidget {
-  const NxnCubeView({super.key, required this.controller, this.onMove});
+  const NxnCubeView({
+    super.key,
+    required this.controller,
+    this.onMove,
+    this.onStickerTap,
+    this.moveDuration = const Duration(milliseconds: 260),
+  });
 
   final NxnCubeController controller;
 
   /// Called after a finger turn is committed.
   final ValueChanged<NxnMove>? onMove;
+
+  /// Taps on stickers (e.g. for colouring); null disables tap handling.
+  final ValueChanged<NxnStickerHit>? onStickerTap;
+
+  /// Duration of each queued (programmatic) move animation.
+  final Duration moveDuration;
 
   @override
   State<NxnCubeView> createState() => _NxnCubeViewState();
@@ -25,7 +37,7 @@ class NxnCubeView extends StatefulWidget {
 enum _Mode { none, deciding, orbiting, turning }
 
 class _NxnCubeViewState extends State<NxnCubeView>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const _decidePx = 12.0;
   static const _edgeGrabPx = 16.0;
   static const _orbitSpeed = 0.01;
@@ -47,10 +59,62 @@ class _NxnCubeViewState extends State<NxnCubeView>
   double _snapFrom = 0;
   double _snapTo = 0;
 
+  late final AnimationController _anim =
+      AnimationController(vsync: this, duration: widget.moveDuration)
+        ..addListener(_onAnimTick)
+        ..addStatusListener((s) {
+          if (s == AnimationStatus.completed) {
+            _anim.reset();
+            _animating = null;
+            widget.controller.commitPending();
+          }
+        });
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onController);
+  }
+
+  @override
+  void didUpdateWidget(covariant NxnCubeView old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onController);
+      widget.controller.addListener(_onController);
+    }
+  }
+
   @override
   void dispose() {
+    widget.controller.removeListener(_onController);
     _snap.dispose();
+    _anim.dispose();
     super.dispose();
+  }
+
+  /// The queued move currently being animated. Guards against restarting:
+  /// `forward(from: 0)` notifies listeners before `isAnimating` turns true.
+  NxnMove? _animating;
+
+  void _onController() {
+    final pending = _c.pending;
+    if (pending == null || identical(pending, _animating)) return;
+    _animating = pending;
+    _anim.forward(from: 0);
+  }
+
+  void _onAnimTick() {
+    final move = _c.pending;
+    if (move == null) return;
+    final t = Curves.easeInOut.transform(_anim.value);
+    final target = (move.turns == 2 ? 2 : move.turns) * math.pi / 2;
+    _c.turn = NxnTurn(move.axis, move.layer, target * t);
+  }
+
+  void _onTapUp(TapUpDetails d) {
+    final hit = nxnHitTest(_c.state, _projection(), d.localPosition);
+    if (hit != null) widget.onStickerTap!(hit);
   }
 
   NxnCubeController get _c => widget.controller;
@@ -75,7 +139,8 @@ class _NxnCubeViewState extends State<NxnCubeView>
 
     if (_mode == _Mode.deciding) {
       if (total.distance < _decidePx) return;
-      _mode = widget.onMove != null && _beginTurn(start, total)
+      _mode = widget.onMove != null && !_c.hasQueuedWork &&
+              _beginTurn(start, total)
           ? _Mode.turning
           : _Mode.orbiting;
     }
@@ -186,6 +251,7 @@ class _NxnCubeViewState extends State<NxnCubeView>
           onPanStart: _onPanStart,
           onPanUpdate: _onPanUpdate,
           onPanEnd: _onPanEnd,
+          onTapUp: widget.onStickerTap == null ? null : _onTapUp,
           child: ListenableBuilder(
             listenable: _c,
             builder: (context, _) => CustomPaint(

@@ -6,7 +6,6 @@ import '../../../core/cube/app_cube_controller.dart';
 import '../../../core/cube/cube_facelets.dart';
 import '../../puzzles/application/puzzle_type_controller.dart';
 import '../../puzzles/domain/puzzle_type.dart';
-import '../../pyraminx/domain/pyraminx_scramble.dart';
 import '../../stats/application/stats_controller.dart';
 
 /// The 3x3 cube used on the free-play tab (puzzle_cube).
@@ -79,7 +78,7 @@ class FreePlayController extends Notifier<TimerState> {
     } else if (type.usesNxnEngine) {
       text = ref.read(nxnCubeProvider(type.order!)).scramble();
     } else {
-      text = pyraminxScramble();
+      text = ref.read(pyraminxProvider).scramble();
     }
     state = TimerState(status: TimerStatus.ready, scramble: text);
   }
@@ -90,6 +89,8 @@ class FreePlayController extends Notifier<TimerState> {
       _cube3.reset();
     } else if (type.usesNxnEngine) {
       ref.read(nxnCubeProvider(type.order!)).reset();
+    } else {
+      ref.read(pyraminxProvider).reset();
     }
     state = const TimerState();
   }
@@ -100,7 +101,7 @@ class FreePlayController extends Notifier<TimerState> {
     if (type.usesNxnEngine) {
       return ref.read(nxnCubeProvider(type.order!)).isSolved;
     }
-    return false;
+    return ref.read(pyraminxProvider).isSolved;
   }
 
   /// Called after every finger turn on the 3D cube.

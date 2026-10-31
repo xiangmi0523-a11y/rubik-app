@@ -158,11 +158,48 @@ class RealisticCubeRenderer {
 
     final sticker =
         _roundedRect(face.at, style.stickerInset, style.stickerRadius);
-    final lit = _shade(color, face.normal);
-    // Glossy gradient: brighter towards the light, darker away from it.
-    final towards = Offset(_light.x, _light.y);
     final c = face.at(0, 0);
     final reach = (face.at(1, 1) - face.at(-1, -1)).distance / 2;
+    _paintSticker(canvas, sticker, c, reach, face.normal, color);
+  }
+
+  /// Paints one non-square panel (e.g. a Pyraminx triangle) with the same
+  /// plastic + glossy-sticker look: [body] is the full cell, [sticker] the
+  /// coloured inset (omit for bare plastic), [center]/[reach] its centre and
+  /// approximate radius on screen, [normal] the screen-space unit normal.
+  void paintPanel(
+    Canvas canvas, {
+    required Path body,
+    required Vector3 normal,
+    Path? sticker,
+    Color? color,
+    Offset center = Offset.zero,
+    double reach = 1,
+  }) {
+    canvas.drawPath(
+      body,
+      Paint()
+        ..color =
+            _shade(style.bodyColor, normal, spec: 0.3, shininess: 16),
+    );
+    canvas.drawPath(
+      body,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.9
+        ..strokeJoin = StrokeJoin.round
+        ..color = Colors.black.withValues(alpha: 0.9),
+    );
+    if (sticker != null && color != null) {
+      _paintSticker(canvas, sticker, center, reach, normal, color);
+    }
+  }
+
+  void _paintSticker(Canvas canvas, Path sticker, Offset c, double reach,
+      Vector3 normal, Color color,) {
+    final lit = _shade(color, normal);
+    // Glossy gradient: brighter towards the light, darker away from it.
+    final towards = Offset(_light.x, _light.y);
     final from = c + towards * reach;
     final to = c - towards * reach;
     canvas.drawPath(
@@ -179,7 +216,7 @@ class RealisticCubeRenderer {
         ]),
     );
     // Specular sheen on faces turned toward the light.
-    final spec = _specular(face.normal, 36);
+    final spec = _specular(normal, 36);
     if (spec > 0.02) {
       canvas.drawPath(
         sticker,
@@ -202,6 +239,11 @@ class RealisticCubeRenderer {
         ..strokeWidth = 0.7
         ..color = Colors.black.withValues(alpha: 0.35),
     );
+  }
+
+  /// Draws only the soft ground shadow (for callers that paint panels).
+  void paintShadow(Canvas canvas, Size size, double extent) {
+    if (style.shadow) _paintShadow(canvas, size, extent);
   }
 
   /// Rounded square of half-size [half] and corner radius [radius] in

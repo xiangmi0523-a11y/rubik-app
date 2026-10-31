@@ -1,11 +1,16 @@
+import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
+
+import 'package:flutter/painting.dart' show Color;
 
 import 'nxn_cube_state.dart';
 import 'nxn_projection.dart';
 
 /// Owns an n×n cube's state, camera and in-progress turn.
 class NxnCubeController extends ChangeNotifier {
-  NxnCubeController(this.n) : _state = NxnCubeState.solved(n);
+  NxnCubeController(this.n, {NxnCubeState? initial})
+      : _state = initial?.copy() ?? NxnCubeState.solved(n);
 
   final int n;
 
@@ -16,6 +21,12 @@ class NxnCubeController extends ChangeNotifier {
   double _rotX = initialRotationX;
   double _rotY = initialRotationY;
   NxnTurn? _turn;
+  final Queue<NxnMove> _queue = Queue();
+  NxnMove? _pending;
+
+  /// Move currently animating (driven by an [NxnCubeView]), or null.
+  NxnMove? get pending => _pending;
+  bool get hasQueuedWork => _pending != null || _queue.isNotEmpty;
 
   NxnCubeState get state => _state;
   double get rotationX => _rotX;
@@ -30,9 +41,12 @@ class NxnCubeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void resetCamera() {
-    _rotX = initialRotationX;
-    _rotY = initialRotationY;
+  void resetCamera() => setView(
+      rotationX: initialRotationX, rotationY: initialRotationY);
+
+  void setView({required double rotationX, required double rotationY}) {
+    _rotX = rotationX;
+    _rotY = rotationY;
     notifyListeners();
   }
 
@@ -46,10 +60,48 @@ class NxnCubeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void reset() {
-    _state = NxnCubeState.solved(n);
+  void reset() => replaceState(NxnCubeState.solved(n));
+
+  void replaceState(NxnCubeState state) {
+    _queue.clear();
+    _pending = null;
     _turn = null;
+    _state = state.copy();
     notifyListeners();
+  }
+
+  /// Paints one sticker (colour input).
+  void setSticker(IVec pos, IVec normal, Color color) {
+    for (final c in _state.cubies) {
+      if (c.pos == pos && c.stickers.containsKey(normal)) {
+        c.stickers[normal] = color;
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  /// Queues animated moves.
+  void playSequence(Iterable<NxnMove> moves) {
+    _queue.addAll(moves);
+    _startNext();
+  }
+
+  void _startNext() {
+    if (_pending != null || _queue.isEmpty) return;
+    _pending = _queue.removeFirst();
+    notifyListeners();
+  }
+
+  /// Called by the view when the pending animation finishes.
+  void commitPending() {
+    final move = _pending;
+    if (move == null) return;
+    _pending = null;
+    _turn = null;
+    _state.apply(move);
+    notifyListeners();
+    _startNext();
   }
 
   /// Applies a random scramble and returns it in standard notation.

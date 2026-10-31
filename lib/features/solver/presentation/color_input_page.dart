@@ -6,11 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/cube/cube_facelets.dart';
 import '../../home/application/home_tab_controller.dart';
+import '../../player/domain/puzzle_stepper.dart';
+import '../../player/presentation/player_page.dart';
 import '../application/color_input_controller.dart';
 import '../application/hold_guide_controller.dart';
 import '../application/solve_controller.dart';
 import '../domain/cube_input_validator.dart';
-import 'solution_page.dart';
 import 'widgets/color_palette_bar.dart';
 import 'widgets/hold_guide_sheet.dart';
 import 'widgets/sticker_paint_cube.dart';
@@ -42,7 +43,11 @@ class ColorInputPage extends ConsumerWidget {
         final result = next.result!;
         ref.read(solveControllerProvider.notifier).acknowledge();
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => SolutionPage(result: result)),
+          MaterialPageRoute(
+            builder: (_) => PlayerPage(
+              script: Cube3Script(colors: result.colors, moves: result.moves),
+            ),
+          ),
         );
       } else if (next.status == SolveStatus.invalid) {
         ref.read(solveControllerProvider.notifier).acknowledge();

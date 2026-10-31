@@ -11,6 +11,8 @@ import 'package:rubik_app/core/prefs/shared_prefs_provider.dart';
 import 'package:rubik_app/features/free_play/application/free_play_controller.dart';
 import 'package:rubik_app/features/puzzles/application/puzzle_type_controller.dart';
 import 'package:rubik_app/features/puzzles/domain/puzzle_type.dart';
+import 'package:rubik_app/core/pyraminx/pyraminx_solver.dart';
+import 'package:rubik_app/core/pyraminx/pyraminx_view.dart';
 import 'package:rubik_app/features/pyraminx/domain/pyraminx_scramble.dart';
 import 'package:rubik_app/features/stats/application/stats_controller.dart';
 import 'package:rubik_app/features/stats/domain/solve_record.dart';
@@ -36,7 +38,7 @@ void main() {
     await tester.tap(find.text('四阶'));
     await tester.pumpAndSettle();
     expect(find.byType(NxnCubeView), findsOneWidget);
-    expect(find.text('花式'), findsNothing); // patterns are 3x3 only
+    expect(find.text('花式'), findsOneWidget); // every puzzle has patterns
 
     await tester.tap(find.text('打乱'));
     await tester.pump();
@@ -79,19 +81,28 @@ void main() {
     expect(c.read(filteredRecordsProvider), isEmpty);
   });
 
-  testWidgets('pyraminx: placeholder with manual timing', (tester) async {
+  testWidgets('pyraminx: 3D puzzle, scramble, solve detection and timing',
+      (tester) async {
     final c = await _app(tester);
     await tester.tap(find.text('金字塔'));
     await tester.pumpAndSettle();
-    expect(find.text('金字塔 3D 模型开发中'), findsOneWidget);
-    expect(find.text('复原'), findsNothing);
+    expect(find.byType(PyraminxView), findsOneWidget);
     await tester.tap(find.text('打乱'));
     await tester.pump();
+    final puzzle = c.read(pyraminxProvider);
+    expect(puzzle.isSolved, isFalse);
+    expect(c.read(freePlayControllerProvider).status, TimerStatus.ready);
+
+    // Solve it with the solver, as if by finger turns.
     final n = c.read(freePlayControllerProvider.notifier);
-    n.toggleManual();
-    n.toggleManual();
+    final moves = PyraminxSolver.solve(puzzle.state.colors).moves;
+    for (final m in moves) {
+      puzzle.apply(m);
+      n.onCubeMove();
+    }
+    expect(puzzle.isSolved, isTrue);
+    expect(c.read(freePlayControllerProvider).status, TimerStatus.stopped);
     expect(c.read(statsControllerProvider).single.puzzle, 'pyraminx');
-    expect(c.read(puzzleTypeProvider), PuzzleType.pyraminx);
   });
 
   test('pyraminx scramble format', () {

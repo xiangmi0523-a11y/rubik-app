@@ -7,7 +7,7 @@ import '../../patterns/presentation/pattern_picker_sheet.dart';
 import '../../puzzles/application/puzzle_type_controller.dart';
 import '../../puzzles/domain/puzzle_type.dart';
 import '../../puzzles/presentation/puzzle_type_selector.dart';
-import '../../pyraminx/presentation/pyraminx_placeholder.dart';
+import '../../../core/pyraminx/pyraminx_view.dart';
 import '../application/free_play_controller.dart';
 import 'widgets/timer_display.dart';
 
@@ -24,9 +24,8 @@ class FreePlayPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('自由玩'),
         actions: [
-          if (type.hasPatterns)
-            TextButton.icon(
-              onPressed: () => showPatternPicker(context),
+          TextButton.icon(
+              onPressed: () => showPatternPicker(context, type),
               icon: const Icon(Icons.auto_awesome),
               label: const Text('花式'),
             ),
@@ -37,11 +36,7 @@ class FreePlayPage extends ConsumerWidget {
           children: [
             const PuzzleTypeSelector(),
             const SizedBox(height: 4),
-            TimerDisplay(
-              state: timer,
-              onTap: notifier.toggleManual,
-              manualOnly: type.isPlaceholder,
-            ),
+            TimerDisplay(state: timer, onTap: notifier.toggleManual),
             if (timer.scramble.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -53,8 +48,7 @@ class FreePlayPage extends ConsumerWidget {
                 ),
               ),
             Expanded(child: _PuzzleArea(type: type, onMove: notifier.onCubeMove)),
-            if (!type.isPlaceholder)
-              const Padding(
+            const Padding(
                 padding: EdgeInsets.only(bottom: 4),
                 child: Text('在魔方上拖动转层，在空白处拖动旋转视角',
                     style: TextStyle(fontSize: 12, color: Colors.white54)),
@@ -70,8 +64,7 @@ class FreePlayPage extends ConsumerWidget {
                       label: const Text('打乱'),
                     ),
                   ),
-                  if (!type.isPlaceholder) ...[
-                    const SizedBox(width: 8),
+                  const SizedBox(width: 8),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: notifier.resetCube,
@@ -85,7 +78,6 @@ class FreePlayPage extends ConsumerWidget {
                       onPressed: () => _resetCamera(ref, type),
                       icon: const Icon(Icons.center_focus_strong),
                     ),
-                  ],
                 ],
               ),
             ),
@@ -100,6 +92,8 @@ class FreePlayPage extends ConsumerWidget {
       ref.read(freePlayCubeProvider).resetCamera();
     } else if (type.usesNxnEngine) {
       ref.read(nxnCubeProvider(type.order!)).resetCamera();
+    } else {
+      ref.read(pyraminxProvider).resetCamera();
     }
   }
 }
@@ -130,6 +124,9 @@ class _PuzzleArea extends ConsumerWidget {
         onMove: (_) => onMove(),
       );
     }
-    return const PyraminxPlaceholder();
+    return PyraminxView(
+      controller: ref.watch(pyraminxProvider),
+      onMove: (_) => onMove(),
+    );
   }
 }
