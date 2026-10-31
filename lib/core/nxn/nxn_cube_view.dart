@@ -101,6 +101,7 @@ class _NxnCubeViewState extends State<NxnCubeView>
     final pending = _c.pending;
     if (pending == null || identical(pending, _animating)) return;
     _animating = pending;
+    _anim.duration = widget.moveDuration * (1 / _c.speed);
     _anim.forward(from: 0);
   }
 

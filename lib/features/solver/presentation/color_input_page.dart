@@ -204,12 +204,12 @@ Future<void> _handleOutcome(
         ..showSnackBar(SnackBar(content: Text(message)));
     case PuzzleSolveInvalid(:final reasons):
       await showUnsolvableDialog(context, reasons);
-    case PuzzleSolveUnsupported(:final message):
+    case PuzzleSolveFailed(:final title, :final message):
       await showDialog<void>(
         context: context,
         builder: (c) => AlertDialog(
-          icon: const Icon(Icons.construction, size: 36),
-          title: const Text('求解开发中'),
+          icon: const Icon(Icons.error_outline, size: 36),
+          title: Text(title),
           content: Text(message),
           actions: [
             FilledButton(

@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/player_controller.dart';
 import '../domain/puzzle_stepper.dart';
 
-/// Plays a [PlayerScript] (solution or pattern) on any puzzle, step by step.
+/// Plays a [PlayerScript] (solution or pattern) on any puzzle, step by step:
+/// play / pause, single steps, jump to any move or phase, 1× / 2× / 4×.
 class PlayerPage extends ConsumerWidget {
   const PlayerPage({
     super.key,
@@ -31,13 +32,33 @@ class PlayerPage extends ConsumerWidget {
     final stepper = ref.watch(playerStepperProvider(script));
     final moves = script.moves;
     final total = moves.length;
+    final phases = script.phases;
+    final phase = phaseIndexAt(phases, playback.index);
 
+    String? detail() {
+      if (phase == null || total == 0) return null;
+      final p = phases[phase];
+      // The formula of the next move (or of the last one at the end).
+      final note = script.noteAt(playback.index < total ? playback.index : total - 1);
+      return [
+        '${p.label} ${playback.index - p.start}/${p.length}',
+        ?note,
+      ].join(' · ');
+    }
+
+    final info = detail();
     return Scaffold(
       appBar: AppBar(title: Text(title ?? '还原步骤（$total 步）')),
       body: SafeArea(
         child: Column(
           children: [
             ?header,
+            if (phases.isNotEmpty)
+              _PhaseBar(
+                phases: phases,
+                current: phase,
+                onTap: notifier.jumpToPhase,
+              ),
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
@@ -49,26 +70,27 @@ class PlayerPage extends ConsumerWidget {
                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
             ),
+            if (info != null)
+              Text(info, style: const TextStyle(color: Colors.white70)),
             if (playback.index < total)
               Text('下一步：${moves[playback.index]}',
                   style: const TextStyle(color: Colors.white70)),
             Expanded(child: stepper.buildView()),
+            _MoveStrip(
+              moves: moves,
+              applied: playback.index,
+              onTap: (i) => notifier.jumpTo(i + 1),
+            ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                alignment: WrapAlignment.center,
-                children: [
-                  for (var i = 0; i < total; i++)
-                    ChoiceChip(
-                      label: Text(moves[i]),
-                      selected: i == playback.index - 1,
-                      onSelected: (_) => notifier.jumpTo(i + 1),
-                      backgroundColor:
-                          i < playback.index ? Colors.white10 : null,
-                    ),
+              padding: const EdgeInsets.only(top: 8),
+              child: SegmentedButton<double>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final s in playbackSpeeds)
+                    ButtonSegment(value: s, label: Text('${s.toInt()}×')),
                 ],
+                selected: {playback.speed},
+                onSelectionChanged: (v) => notifier.setSpeed(v.first),
               ),
             ),
             Padding(
@@ -105,6 +127,123 @@ class PlayerPage extends ConsumerWidget {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One tile per phase (name and move count), all visible at once; tapping
+/// jumps to the start of that phase.
+class _PhaseBar extends StatelessWidget {
+  const _PhaseBar({
+    required this.phases,
+    required this.current,
+    required this.onTap,
+  });
+
+  final List<PlayerPhase> phases;
+  final int? current;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        children: [
+          for (var i = 0; i < phases.length; i++)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Material(
+                  key: ValueKey('phase$i'),
+                  color: i == current
+                      ? scheme.primaryContainer
+                      : Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => onTap(i),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Column(
+                        children: [
+                          Text(phases[i].label,
+                              maxLines: 1,
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('${phases[i].length} 步',
+                              style: const TextStyle(fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// All moves as chips in a bounded, scrollable area that keeps the current
+/// move in view; tapping a chip jumps to just after that move.
+class _MoveStrip extends StatefulWidget {
+  const _MoveStrip({
+    required this.moves,
+    required this.applied,
+    required this.onTap,
+  });
+
+  final List<String> moves;
+  final int applied;
+  final ValueChanged<int> onTap;
+
+  @override
+  State<_MoveStrip> createState() => _MoveStripState();
+}
+
+class _MoveStripState extends State<_MoveStrip> {
+  final _currentKey = GlobalKey();
+
+  @override
+  void didUpdateWidget(covariant _MoveStrip old) {
+    super.didUpdateWidget(old);
+    if (old.applied != widget.applied) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = _currentKey.currentContext;
+        if (ctx != null && ctx.mounted) {
+          Scrollable.ensureVisible(ctx, alignment: 0.5);
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final moves = widget.moves;
+    final current = widget.applied == 0 ? 0 : widget.applied - 1;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 132),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          alignment: WrapAlignment.center,
+          children: [
+            for (var i = 0; i < moves.length; i++)
+              ChoiceChip(
+                key: i == current ? _currentKey : null,
+                label: Text(moves[i]),
+                selected: i == widget.applied - 1,
+                onSelected: (_) => widget.onTap(i),
+                backgroundColor: i < widget.applied ? Colors.white10 : null,
+              ),
           ],
         ),
       ),

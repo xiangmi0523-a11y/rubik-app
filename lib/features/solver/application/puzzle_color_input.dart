@@ -12,6 +12,8 @@ import '../../../core/pyraminx/pyraminx_model.dart';
 import '../../../core/pyraminx/pyraminx_solver.dart';
 import '../../player/domain/puzzle_stepper.dart';
 import '../../puzzles/domain/puzzle_type.dart';
+import '../domain/big_cube/big_cube_solver.dart';
+import '../domain/big_cube/solve_step.dart';
 import '../domain/big_cube_validator.dart';
 import '../domain/two_by_two_solver.dart';
 
@@ -48,8 +50,10 @@ class PuzzleSolveInvalid extends PuzzleSolveOutcome {
   final List<String> reasons;
 }
 
-class PuzzleSolveUnsupported extends PuzzleSolveOutcome {
-  const PuzzleSolveUnsupported(this.message);
+/// The solver gave up (time budget) or hit an internal error.
+class PuzzleSolveFailed extends PuzzleSolveOutcome {
+  const PuzzleSolveFailed({required this.title, required this.message});
+  final String title;
   final String message;
 }
 
@@ -158,10 +162,7 @@ class NxnColorInput extends Notifier<NxnColorInputState> {
     if (n != 2) {
       final errors = BigCubeValidator.validate(cube.state);
       if (errors.isNotEmpty) return PuzzleSolveInvalid(errors);
-      return PuzzleSolveUnsupported(
-        '颜色校验通过（中心块、棱块、角块都合法）。$n 阶的自动求解需要“降阶法”（先拼中心、再配对棱块，'
-        '最后按三阶解并处理奇偶），还在开发中。',
-      );
+      return solveBigCube(cube.state.copy());
     }
     final start = cube.state.copy();
     final result = await Isolate.run(() => TwoByTwoSolver.solve(start));
@@ -169,6 +170,52 @@ class NxnColorInput extends Notifier<NxnColorInputState> {
     return PuzzleSolveOk(NxnScript(initial: start, steps: result.moves));
   }
 }
+
+/// Solves a validated 4x4 / 5x5 in a background isolate with the reduction
+/// solver and turns the result into a phased player script.
+Future<PuzzleSolveOutcome> solveBigCube(
+  NxnCubeState start, {
+  Duration timeout = bigCubeSolveTimeout,
+}) async {
+  final BigCubeSolution result;
+  try {
+    result = await Isolate.run(() => BigCubeSolver.solve(start, timeout: timeout));
+  } on Object catch (e) {
+    return PuzzleSolveFailed(title: '求解出错', message: '求解过程出现异常：$e');
+  }
+  final failure = result.failure;
+  if (failure != null) {
+    return switch (failure.kind) {
+      SolveFailureKind.invalidInput => PuzzleSolveInvalid([failure.message]),
+      SolveFailureKind.timeout => PuzzleSolveFailed(
+          title: '求解超时',
+          message: '${timeout.inSeconds} 秒内没有算完（${failure.message}）。'
+              '请稍后重试；如果反复超时，请检查填色是否正确。',
+        ),
+      SolveFailureKind.internal => PuzzleSolveFailed(
+          title: '求解出错',
+          message: '求解器内部校验没有通过（${failure.message}），没有给出可能错误的步骤。'
+              '请重试或换一种拿法重新填色。',
+        ),
+    };
+  }
+  final notes = [
+    for (final step in result.steps)
+      for (var i = 0; i < step.moves.length; i++) step.description,
+  ];
+  return PuzzleSolveOk(NxnScript(
+    initial: start,
+    steps: result.moves,
+    phases: [
+      for (final p in result.phases)
+        PlayerPhase(label: p.phase.label, start: p.start, end: p.end),
+    ],
+    notes: notes,
+  ));
+}
+
+/// Time budget for one 4x4 / 5x5 solve.
+const bigCubeSolveTimeout = Duration(seconds: 30);
 
 final nxnColorInputProvider =
     NotifierProvider.family<NxnColorInput, NxnColorInputState, int>(

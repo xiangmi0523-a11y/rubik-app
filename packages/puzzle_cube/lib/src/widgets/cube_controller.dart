@@ -28,8 +28,9 @@ class CubeController extends ChangeNotifier {
         _viewRotX = initialViewRotationX,
         _viewRotY = initialViewRotationY;
 
-  /// How long a single animated quarter-turn takes.
-  final Duration moveDuration;
+  /// How long a single animated quarter-turn takes. Changing it takes effect
+  /// from the next turn (used for playback speed).
+  Duration moveDuration;
 
   /// The view rotation about x restored by [resetCamera].
   final double initialViewRotationX;
@@ -268,6 +269,7 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
     final move = widget.controller.pendingMove;
     if (move != null && !_anim.isAnimating) {
       setState(() => _activePlan = _planFor(move));
+      _anim.duration = widget.controller.moveDuration;
       _anim.forward();
     } else if (move == null) {
       setState(() => _activePlan = null);

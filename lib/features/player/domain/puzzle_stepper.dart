@@ -11,10 +11,38 @@ import '../../../core/pyraminx/pyraminx_controller.dart';
 import '../../../core/pyraminx/pyraminx_model.dart';
 import '../../../core/pyraminx/pyraminx_view.dart';
 
+/// A named section of a script's moves, [start, end) — e.g. one phase of a
+/// big-cube solve (拼中心, 配对棱块, ...).
+class PlayerPhase {
+  const PlayerPhase({required this.label, required this.start, required this.end});
+
+  final String label;
+  final int start;
+  final int end;
+
+  int get length => end - start;
+  bool contains(int move) => move >= start && move < end;
+}
+
+/// Index of the current phase after [applied] moves: the phase of the next
+/// move, or the last phase once every move is applied. Null without phases.
+int? phaseIndexAt(List<PlayerPhase> phases, int applied) {
+  if (phases.isEmpty) return null;
+  final move = applied < phases.last.end ? applied : phases.last.end - 1;
+  final i = phases.indexWhere((p) => p.contains(move));
+  return i < 0 ? null : i;
+}
+
 /// A move list to play on some puzzle, starting from a given state.
 abstract class PlayerScript {
   /// Moves in display notation, one per step.
   List<String> get moves;
+
+  /// Named sections of [moves], in order; empty if the script has none.
+  List<PlayerPhase> get phases => const [];
+
+  /// What move [index] is part of (e.g. "配对：UF 棱"), or null.
+  String? noteAt(int index) => null;
 
   PuzzleStepper createStepper();
 }
@@ -33,6 +61,9 @@ abstract class PuzzleStepper {
   /// Instantly shows the state after the first [count] steps.
   void show(int count);
 
+  /// Animation speed factor (1 = normal, 2 = twice as fast, ...).
+  set speed(double value);
+
   Widget buildView();
 
   void dispose();
@@ -40,7 +71,7 @@ abstract class PuzzleStepper {
 
 // ── 3x3 (puzzle_cube) ──────────────────────────────────────────────────────
 
-class Cube3Script implements PlayerScript {
+class Cube3Script extends PlayerScript {
   Cube3Script({required this.colors, required this.moves});
 
   /// 54 colours in cuber facelet order.
@@ -56,8 +87,10 @@ class _Cube3Stepper implements PuzzleStepper {
   _Cube3Stepper(this.script)
       : cube = AppCubeController(
           initialState: CubeFacelets.build(script.colors),
-          moveDuration: const Duration(milliseconds: 320),
+          moveDuration: _duration,
         );
+
+  static const _duration = Duration(milliseconds: 320);
 
   final Cube3Script script;
   final AppCubeController cube;
@@ -84,6 +117,9 @@ class _Cube3Stepper implements PuzzleStepper {
   }
 
   @override
+  set speed(double value) => cube.moveDuration = _duration * (1 / value);
+
+  @override
   Widget buildView() => Cube(controller: cube);
 
   @override
@@ -92,14 +128,28 @@ class _Cube3Stepper implements PuzzleStepper {
 
 // ── N×N (in-house engine) ──────────────────────────────────────────────────
 
-class NxnScript implements PlayerScript {
-  NxnScript({required this.initial, required this.steps});
+class NxnScript extends PlayerScript {
+  NxnScript({
+    required this.initial,
+    required this.steps,
+    this.phases = const [],
+    this.notes,
+  }) : assert(notes == null || notes.length == steps.length);
 
   final NxnCubeState initial;
   final List<NxnMove> steps;
 
   @override
-  List<String> get moves => [for (final m in steps) m.notation(initial.n)];
+  final List<PlayerPhase> phases;
+
+  /// Optional note per move (same length as [steps]).
+  final List<String>? notes;
+
+  @override
+  late final List<String> moves = [for (final m in steps) m.notation(initial.n)];
+
+  @override
+  String? noteAt(int index) => notes?[index];
 
   @override
   PuzzleStepper createStepper() => _NxnStepper(this);
@@ -128,6 +178,9 @@ class _NxnStepper implements PuzzleStepper {
       script.initial.copy()..applyAll(script.steps.take(count)));
 
   @override
+  set speed(double value) => cube.speed = value;
+
+  @override
   Widget buildView() => NxnCubeView(controller: cube);
 
   @override
@@ -136,7 +189,7 @@ class _NxnStepper implements PuzzleStepper {
 
 // ── Pyraminx ───────────────────────────────────────────────────────────────
 
-class PyraminxScript implements PlayerScript {
+class PyraminxScript extends PlayerScript {
   PyraminxScript({required this.initial, required this.steps});
 
   final PyraminxState initial;
@@ -170,6 +223,9 @@ class _PyraminxStepper implements PuzzleStepper {
   @override
   void show(int count) => puzzle.replaceState(
       script.initial.copy()..applyAll(script.steps.take(count)));
+
+  @override
+  set speed(double value) => puzzle.speed = value;
 
   @override
   Widget buildView() =>

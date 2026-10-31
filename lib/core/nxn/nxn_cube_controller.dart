@@ -24,6 +24,9 @@ class NxnCubeController extends ChangeNotifier {
   final Queue<NxnMove> _queue = Queue();
   NxnMove? _pending;
 
+  /// Playback speed factor for queued animations (1 = normal).
+  double speed = 1;
+
   /// Move currently animating (driven by an [NxnCubeView]), or null.
   NxnMove? get pending => _pending;
   bool get hasQueuedWork => _pending != null || _queue.isNotEmpty;

@@ -31,6 +31,9 @@ class PyraminxController extends ChangeNotifier {
   final Queue<PyraminxMove> _queue = Queue();
   PyraminxMove? _pending;
 
+  /// Playback speed factor for queued animations (1 = normal).
+  double speed = 1;
+
   PyraminxState get state => _state;
   double get rotationX => _rotX;
   double get rotationY => _rotY;
