@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/cube/cube_facelets.dart';
 import '../../home/application/home_tab_controller.dart';
 import '../application/color_input_controller.dart';
 import '../application/hold_guide_controller.dart';
@@ -124,8 +125,10 @@ class ColorInputPage extends ConsumerWidget {
                             icon: Icons.flip_to_back,
                             onTap: () {
                               // Shows D, L and B.
-                              cube.resetCamera();
-                              cube.rotateView(dx: math.pi, dy: 1.0);
+                              cube.setView(
+                                rotationX: CubeNotation.viewRotationX + 1.0,
+                                rotationY: CubeNotation.viewRotationY + math.pi,
+                              );
                             },
                           ),
                         ],

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../../core/cube/app_cube_controller.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
-import '../../../../core/cube/cube_facelets.dart';
 
 /// Half-screen guide: how to hold the physical cube while colouring.
 Future<void> showHoldGuideSheet(BuildContext context) {
@@ -26,10 +26,8 @@ class _HoldGuide extends StatefulWidget {
 
 class _HoldGuideState extends State<_HoldGuide> {
   // Only the centres are coloured, like the reference app.
-  final _cube = CubeController(
+  final _cube = AppCubeController(
     initialState: PuzzleCubeState.colorless(),
-    initialViewRotationX: CubeNotation.viewRotationX,
-    initialViewRotationY: CubeNotation.viewRotationY,
   );
 
   @override

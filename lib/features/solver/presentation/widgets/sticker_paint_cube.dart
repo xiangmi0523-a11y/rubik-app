@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
+import '../../../../core/cube/app_cube_controller.dart';
+
 import '../../../../core/cube/sticker_hit_test.dart';
 
 /// puzzle_cube's 3D cube where a tap reports the exact sticker (facelet index
@@ -12,7 +14,7 @@ class StickerPaintCube extends StatelessWidget {
     required this.onFaceletTap,
   });
 
-  final CubeController controller;
+  final AppCubeController controller;
   final ValueChanged<int> onFaceletTap;
 
   @override

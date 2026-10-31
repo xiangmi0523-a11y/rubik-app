@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../../core/cube/app_cube_controller.dart';
 import 'package:cuber/cuber.dart' as cuber;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
@@ -22,12 +23,10 @@ class PlaybackState {
 
 /// The 3D cube for one solution, starting from the user's colouring.
 final playbackCubeProvider =
-    Provider.autoDispose.family<CubeController, SolveResult>((ref, result) {
-  final controller = CubeController(
+    Provider.autoDispose.family<AppCubeController, SolveResult>((ref, result) {
+  final controller = AppCubeController(
     initialState: CubeFacelets.build(result.colors),
     moveDuration: const Duration(milliseconds: 320),
-    initialViewRotationX: CubeNotation.viewRotationX,
-    initialViewRotationY: CubeNotation.viewRotationY,
   );
   ref.onDispose(controller.dispose);
   return controller;
@@ -38,7 +37,7 @@ class PlaybackController extends Notifier<PlaybackState> {
   PlaybackController(this.result);
 
   final SolveResult result;
-  late CubeController _cube;
+  late AppCubeController _cube;
   int? _pendingJump;
   Timer? _timer;
 

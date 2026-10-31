@@ -1,4 +1,5 @@
 import 'package:cuber/cuber.dart' as cuber;
+import '../../../core/cube/app_cube_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
@@ -100,11 +101,9 @@ final colorInputProvider =
 );
 
 /// The 3D cube the user paints on; mirrors [colorInputProvider].
-final colorInputCubeProvider = Provider<CubeController>((ref) {
-  final controller = CubeController(
+final colorInputCubeProvider = Provider<AppCubeController>((ref) {
+  final controller = AppCubeController(
     initialState: CubeFacelets.build(ref.read(colorInputProvider).colors),
-    initialViewRotationX: CubeNotation.viewRotationX,
-    initialViewRotationY: CubeNotation.viewRotationY,
   );
   ref.listen<List<Color>>(
     colorInputProvider.select((s) => s.colors),

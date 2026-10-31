@@ -1,4 +1,5 @@
 import 'package:cuber/cuber.dart' as cuber;
+import '../../../core/cube/app_cube_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
@@ -6,11 +7,9 @@ import '../../../core/cube/cube_facelets.dart';
 import '../../stats/application/stats_controller.dart';
 
 /// The 3D cube used on the free-play tab.
-final freePlayCubeProvider = Provider<CubeController>((ref) {
-  final controller = CubeController(
+final freePlayCubeProvider = Provider<AppCubeController>((ref) {
+  final controller = AppCubeController(
     moveDuration: const Duration(milliseconds: 200),
-    initialViewRotationX: CubeNotation.viewRotationX,
-    initialViewRotationY: CubeNotation.viewRotationY,
   );
   ref.onDispose(controller.dispose);
   return controller;
