@@ -6,9 +6,22 @@ import '../application/playback_controller.dart';
 import '../domain/solve_result.dart';
 
 class SolutionPage extends ConsumerWidget {
-  const SolutionPage({super.key, required this.result});
+  const SolutionPage({
+    super.key,
+    required this.result,
+    this.title,
+    this.header,
+    this.startText = '准备开始',
+  });
 
   final SolveResult result;
+
+  /// App-bar title; defaults to "还原步骤（N 步）".
+  final String? title;
+
+  /// Optional widget shown above the step counter.
+  final Widget? header;
+  final String startText;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -20,17 +33,18 @@ class SolutionPage extends ConsumerWidget {
     final total = moves.length;
 
     return Scaffold(
-      appBar: AppBar(title: Text('还原步骤（$total 步）')),
+      appBar: AppBar(title: Text(title ?? '还原步骤（$total 步）')),
       body: SafeArea(
         child: Column(
           children: [
+            ?header,
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 total == 0
                     ? '已经是还原状态'
                     : playback.index == 0
-                        ? '准备开始'
+                        ? startText
                         : '第 ${playback.index} / $total 步：${moves[playback.index - 1]}',
                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),

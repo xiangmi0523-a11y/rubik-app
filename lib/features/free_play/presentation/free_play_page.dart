@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
+import '../../patterns/presentation/pattern_picker_sheet.dart';
 import '../application/free_play_controller.dart';
 import 'widgets/timer_display.dart';
 
@@ -15,7 +16,16 @@ class FreePlayPage extends ConsumerWidget {
     final notifier = ref.read(freePlayControllerProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('自由玩')),
+      appBar: AppBar(
+        title: const Text('自由玩'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => showPatternPicker(context),
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('花式'),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
