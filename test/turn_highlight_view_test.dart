@@ -17,7 +17,7 @@ import 'package:rubik_app/features/player/application/player_controller.dart';
 import 'package:rubik_app/features/player/domain/puzzle_stepper.dart';
 import 'package:rubik_app/features/player/presentation/player_page.dart';
 
-const _dim = 0.5; // TurnHighlight default
+final _dim = TurnHighlight().dim; // the default level the views use
 const _frame = Duration(milliseconds: 16);
 
 NxnCubePainter _nxnPainter(WidgetTester tester) => tester

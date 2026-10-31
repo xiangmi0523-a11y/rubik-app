@@ -152,7 +152,7 @@ void main() {
       h.tick(const Duration(milliseconds: -5));
       expect(h.brightnessOf('x'), 1);
       h.tick(const Duration(seconds: 10));
-      expect(h.brightnessOf('x'), 0.5);
+      expect(h.brightnessOf('x'), h.dim);
       h.end();
       h.tick(const Duration(seconds: 10));
       h.tick(const Duration(seconds: 10));
@@ -189,18 +189,25 @@ void main() {
       return [bytes.getUint8(i), bytes.getUint8(i + 1), bytes.getUint8(i + 2)];
     }
 
-    testWidgets('dimmed stickers are darker but keep their colour', (tester) async {
+    testWidgets('dimmed stickers (default level) are clearly darker but keep '
+        'their colour', (tester) async {
+      final level = TurnHighlight().dim;
+      expect(level, inInclusiveRange(0.3, 0.4));
       for (final color in const [
         Color(0xFFF44336), // red
         Color(0xFF4CAF50), // green
+        Color(0xFF2196F3), // blue
+        Color(0xFFFF9800), // orange
         Color(0xFFFFEB3B), // yellow
         Color(0xFFFFFFFF), // white
       ]) {
         final bright = await centrePixel(tester, color, 1);
-        final dim = await centrePixel(tester, color, 0.5);
+        final dim = await centrePixel(tester, color, level);
         final lb = bright.reduce((a, b) => a + b), ld = dim.reduce((a, b) => a + b);
-        // Clearly darker, far from black.
-        expect(ld / lb, inInclusiveRange(0.4, 0.65), reason: '$color');
+        // Clearly darker (about a third), but not black.
+        expect(ld / lb, inInclusiveRange(0.25, 0.45), reason: '$color');
+        expect(dim.reduce((a, b) => a > b ? a : b), greaterThan(55),
+            reason: '$color still visible');
         // Same hue: the brightest channel stays the brightest.
         final maxB = bright.indexOf(bright.reduce((a, b) => a > b ? a : b));
         expect(dim[maxB], dim.reduce((a, b) => a > b ? a : b), reason: '$color');

@@ -23,7 +23,7 @@ class TurnHighlight {
   /// Creates a highlight. [dim] is the brightness of the pieces that don't
   /// turn, once fully dimmed (1 = no dimming).
   TurnHighlight({
-    this.dim = 0.5,
+    this.dim = 0.35,
     this.fadeFraction = 0.25,
     this.holdFraction = 0.7,
   }) : assert(dim > 0 && dim <= 1);
