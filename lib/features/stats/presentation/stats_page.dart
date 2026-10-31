@@ -5,6 +5,7 @@ import '../../../core/utils/time_format.dart';
 import '../../puzzles/presentation/puzzle_type_selector.dart';
 import '../application/stats_controller.dart';
 import '../domain/averages.dart';
+import '../domain/solve_record.dart';
 
 class StatsPage extends ConsumerWidget {
   const StatsPage({super.key});
@@ -14,7 +15,7 @@ class StatsPage extends ConsumerWidget {
     final records = ref.watch(filteredRecordsProvider);
     final summary = ref.watch(statsSummaryProvider);
     final puzzle = ref.watch(statsFilterProvider);
-    final times = records.map((r) => r.durationMs).toList();
+    final times = records.map((r) => r.effectiveMs).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -75,9 +76,10 @@ class StatsPage extends ConsumerWidget {
                             .read(statsControllerProvider.notifier)
                             .remove(r.id),
                         child: ListTile(
+                          onTap: () => _editPenalty(context, ref, r),
                           leading: Text('#${idx + 1}'),
                           title: Text(
-                            formatMs(r.durationMs),
+                            recordLabel(r),
                             style: const TextStyle(
                               fontSize: 20,
                               fontFeatures: [FontFeature.tabularFigures()],
@@ -97,6 +99,40 @@ class StatsPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _editPenalty(
+      BuildContext context, WidgetRef ref, SolveRecord r) async {
+    final choice = await showModalBottomSheet<Object>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('成绩 ${formatMs(r.durationMs)}',
+                style: Theme.of(c).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            for (final p in Penalty.values)
+              ListTile(
+                leading: Icon(p == r.penalty
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked),
+                title: Text(p.label),
+                onTap: () => Navigator.pop(c, p),
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('删除这条成绩'),
+              onTap: () => Navigator.pop(c, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final notifier = ref.read(statsControllerProvider.notifier);
+    if (choice is Penalty) notifier.setPenalty(r.id, choice);
+    if (choice == 'delete') notifier.remove(r.id);
   }
 
   String _date(DateTime d) =>
@@ -148,3 +184,10 @@ class _StatTile extends StatelessWidget {
     );
   }
 }
+
+/// "12.34", "14.34+" (with +2) or "DNF(12.34)".
+String recordLabel(SolveRecord r) => switch (r.penalty) {
+      Penalty.none => formatMs(r.durationMs),
+      Penalty.plus2 => '${formatMs(r.effectiveMs)}+',
+      Penalty.dnf => 'DNF(${formatMs(r.durationMs)})',
+    };

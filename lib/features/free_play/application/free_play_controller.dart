@@ -7,6 +7,8 @@ import '../../../core/cube/cube_facelets.dart';
 import '../../puzzles/application/puzzle_type_controller.dart';
 import '../../puzzles/domain/puzzle_type.dart';
 import '../../stats/application/stats_controller.dart';
+import '../../stats/domain/solve_record.dart';
+import 'inspection_setting.dart';
 
 /// The 3x3 cube used on the free-play tab (puzzle_cube).
 final freePlayCubeProvider = Provider<AppCubeController>((ref) {
@@ -17,7 +19,7 @@ final freePlayCubeProvider = Provider<AppCubeController>((ref) {
   return controller;
 });
 
-enum TimerStatus { idle, ready, running, stopped }
+enum TimerStatus { idle, ready, inspecting, running, stopped }
 
 class TimerState {
   const TimerState({
@@ -25,12 +27,28 @@ class TimerState {
     this.startedAt,
     this.elapsed = Duration.zero,
     this.scramble = '',
+    this.inspectionStartedAt,
+    this.penalty = Penalty.none,
+    this.lastRecordId,
   });
 
   final TimerStatus status;
   final DateTime? startedAt;
   final Duration elapsed;
   final String scramble;
+
+  /// Set while inspecting.
+  final DateTime? inspectionStartedAt;
+
+  /// Penalty of the current / last solve (from inspection or chosen after).
+  final Penalty penalty;
+
+  /// Stats id of the last recorded solve (for editing its penalty).
+  final int? lastRecordId;
+
+  Duration get inspectionElapsed => inspectionStartedAt == null
+      ? Duration.zero
+      : DateTime.now().difference(inspectionStartedAt!);
 
   Duration get current => status == TimerStatus.running && startedAt != null
       ? DateTime.now().difference(startedAt!)
@@ -41,12 +59,17 @@ class TimerState {
     DateTime? startedAt,
     Duration? elapsed,
     String? scramble,
+    Penalty? penalty,
+    int? lastRecordId,
   }) =>
       TimerState(
         status: status ?? this.status,
         startedAt: startedAt ?? this.startedAt,
         elapsed: elapsed ?? this.elapsed,
         scramble: scramble ?? this.scramble,
+        inspectionStartedAt: inspectionStartedAt,
+        penalty: penalty ?? this.penalty,
+        lastRecordId: lastRecordId ?? this.lastRecordId,
       );
 }
 
@@ -80,7 +103,12 @@ class FreePlayController extends Notifier<TimerState> {
     } else {
       text = ref.read(pyraminxProvider).scramble();
     }
-    state = TimerState(status: TimerStatus.ready, scramble: text);
+    final inspect = ref.read(inspectionEnabledProvider);
+    state = TimerState(
+      status: inspect ? TimerStatus.inspecting : TimerStatus.ready,
+      scramble: text,
+      inspectionStartedAt: inspect ? DateTime.now() : null,
+    );
   }
 
   void resetCube() {
@@ -106,7 +134,10 @@ class FreePlayController extends Notifier<TimerState> {
 
   /// Called after every finger turn on the 3D cube.
   void onCubeMove() {
-    if (state.status == TimerStatus.ready) _start();
+    if (state.status == TimerStatus.ready ||
+        state.status == TimerStatus.inspecting) {
+      _start();
+    }
     if (state.status == TimerStatus.running && _isSolved) _stop();
   }
 
@@ -120,19 +151,38 @@ class FreePlayController extends Notifier<TimerState> {
   }
 
   void _start() {
-    state = state.copyWith(
+    final penalty = state.status == TimerStatus.inspecting
+        ? inspectionPenalty(state.inspectionElapsed)
+        : Penalty.none;
+    state = TimerState(
       status: TimerStatus.running,
       startedAt: DateTime.now(),
-      elapsed: Duration.zero,
+      scramble: state.scramble,
+      penalty: penalty,
     );
+  }
+
+  /// Changes the penalty of the solve that just finished.
+  void setLastPenalty(Penalty penalty) {
+    final id = state.lastRecordId;
+    if (id == null) return;
+    ref.read(statsControllerProvider.notifier).setPenalty(id, penalty);
+    state = state.copyWith(penalty: penalty);
   }
 
   void _stop() {
     final elapsed = state.current;
-    state = state.copyWith(status: TimerStatus.stopped, elapsed: elapsed);
-    ref
-        .read(statsControllerProvider.notifier)
-        .add(elapsed, scramble: state.scramble, puzzle: _type);
+    final id = ref.read(statsControllerProvider.notifier).add(
+          elapsed,
+          scramble: state.scramble,
+          puzzle: _type,
+          penalty: state.penalty,
+        );
+    state = state.copyWith(
+      status: TimerStatus.stopped,
+      elapsed: elapsed,
+      lastRecordId: id,
+    );
   }
 }
 

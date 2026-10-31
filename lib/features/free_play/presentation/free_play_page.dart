@@ -9,6 +9,7 @@ import '../../puzzles/domain/puzzle_type.dart';
 import '../../puzzles/presentation/puzzle_type_selector.dart';
 import '../../../core/pyraminx/pyraminx_view.dart';
 import '../application/free_play_controller.dart';
+import '../application/inspection_setting.dart';
 import 'widgets/timer_display.dart';
 
 class FreePlayPage extends ConsumerWidget {
@@ -29,6 +30,17 @@ class FreePlayPage extends ConsumerWidget {
               icon: const Icon(Icons.auto_awesome),
               label: const Text('花式'),
             ),
+          PopupMenuButton<String>(
+            onSelected: (_) =>
+                ref.read(inspectionEnabledProvider.notifier).toggle(),
+            itemBuilder: (_) => [
+              CheckedPopupMenuItem(
+                value: 'inspection',
+                checked: ref.read(inspectionEnabledProvider),
+                child: const Text('15 秒观察时间'),
+              ),
+            ],
+          ),
         ],
       ),
       body: SafeArea(
@@ -36,7 +48,11 @@ class FreePlayPage extends ConsumerWidget {
           children: [
             const PuzzleTypeSelector(),
             const SizedBox(height: 4),
-            TimerDisplay(state: timer, onTap: notifier.toggleManual),
+            TimerDisplay(
+              state: timer,
+              onTap: notifier.toggleManual,
+              onPenalty: notifier.setLastPenalty,
+            ),
             if (timer.scramble.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),

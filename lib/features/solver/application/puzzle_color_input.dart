@@ -12,6 +12,7 @@ import '../../../core/pyraminx/pyraminx_model.dart';
 import '../../../core/pyraminx/pyraminx_solver.dart';
 import '../../player/domain/puzzle_stepper.dart';
 import '../../puzzles/domain/puzzle_type.dart';
+import '../domain/big_cube_validator.dart';
 import '../domain/two_by_two_solver.dart';
 
 /// Puzzle selected on the 填色求解 tab.
@@ -155,8 +156,10 @@ class NxnColorInput extends Notifier<NxnColorInputState> {
     ];
     if (counts.isNotEmpty) return PuzzleSolveInvalid(counts);
     if (n != 2) {
+      final errors = BigCubeValidator.validate(cube.state);
+      if (errors.isNotEmpty) return PuzzleSolveInvalid(errors);
       return PuzzleSolveUnsupported(
-        '颜色数量校验通过。$n 阶的自动求解需要“降阶法”（先拼中心、再配对棱块，'
+        '颜色校验通过（中心块、棱块、角块都合法）。$n 阶的自动求解需要“降阶法”（先拼中心、再配对棱块，'
         '最后按三阶解并处理奇偶），还在开发中。',
       );
     }

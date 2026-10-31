@@ -1,3 +1,5 @@
+import '../../features/stats/domain/averages.dart' show kDnf;
+
 /// 12.34 / 1:02.34
 String formatDuration(Duration d) {
   final cs = (d.inMilliseconds ~/ 10) % 100;
@@ -8,5 +10,9 @@ String formatDuration(Duration d) {
   return '$m:${s.toString().padLeft(2, '0')}.$cc';
 }
 
-String formatMs(int? ms) =>
-    ms == null ? '-' : formatDuration(Duration(milliseconds: ms));
+/// Formats a time in ms; '-' for none, 'DNF' for [kDnf].
+String formatMs(int? ms) => ms == null
+    ? '-'
+    : ms == kDnf
+        ? 'DNF'
+        : formatDuration(Duration(milliseconds: ms));

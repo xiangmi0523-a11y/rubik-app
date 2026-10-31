@@ -11,10 +11,12 @@ class StatsController extends Notifier<List<SolveRecord>> {
   @override
   List<SolveRecord> build() => ref.watch(statsRepositoryProvider).load();
 
-  void add(
+  /// Records a solve and returns its id.
+  int add(
     Duration duration, {
     String scramble = '',
     PuzzleType puzzle = PuzzleType.cube3,
+    Penalty penalty = Penalty.none,
   }) {
     final now = DateTime.now();
     state = [
@@ -25,7 +27,16 @@ class StatsController extends Notifier<List<SolveRecord>> {
         createdAt: now,
         scramble: scramble,
         puzzle: puzzle.id,
+        penalty: penalty,
       ),
+    ];
+    _persist();
+    return state.last.id;
+  }
+
+  void setPenalty(int id, Penalty penalty) {
+    state = [
+      for (final r in state) r.id == id ? r.copyWith(penalty: penalty) : r,
     ];
     _persist();
   }
@@ -72,5 +83,5 @@ final filteredRecordsProvider = Provider<List<SolveRecord>>((ref) {
 
 final statsSummaryProvider = Provider<StatsSummary>((ref) {
   final records = ref.watch(filteredRecordsProvider);
-  return StatsSummary.from(records.map((r) => r.durationMs).toList());
+  return StatsSummary.from(records.map((r) => r.effectiveMs).toList());
 });

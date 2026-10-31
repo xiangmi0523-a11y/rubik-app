@@ -1,25 +1,33 @@
+/// A DNF time (counts as slower than anything).
+const int kDnf = -1;
+
+int _rank(int t) => t == kDnf ? 1 << 62 : t;
+
 /// WCA average of the last [n] times: drop best and worst, mean of the rest.
-/// [timesMs] is ordered oldest -> newest. Returns null if not enough solves.
+/// [timesMs] is ordered oldest -> newest; [kDnf] marks a DNF. Returns null if
+/// not enough solves, [kDnf] if the average is DNF (2+ DNFs in the window).
 int? averageOfLast(List<int> timesMs, int n) {
   if (n < 3 || timesMs.length < n) return null;
   return averageOf(timesMs.sublist(timesMs.length - n));
 }
 
-/// Trimmed mean of one window (drops one best and one worst).
+/// Trimmed mean of one window (drops one best and one worst). One DNF is
+/// dropped as the worst; two or more make the average a DNF.
 int averageOf(List<int> window) {
-  final sorted = [...window]..sort();
+  if (window.where((t) => t == kDnf).length >= 2) return kDnf;
+  final sorted = [...window]..sort((a, b) => _rank(a).compareTo(_rank(b)));
   final trimmed = sorted.sublist(1, sorted.length - 1);
   final sum = trimmed.fold<int>(0, (a, b) => a + b);
   return (sum / trimmed.length).round();
 }
 
-/// Best aoN over every window of the session.
+/// Best aoN over every window of the session (null if too few solves).
 int? bestAverage(List<int> timesMs, int n) {
   if (n < 3 || timesMs.length < n) return null;
   int? best;
   for (var i = 0; i + n <= timesMs.length; i++) {
     final avg = averageOf(timesMs.sublist(i, i + n));
-    if (best == null || avg < best) best = avg;
+    if (best == null || _rank(avg) < _rank(best)) best = avg;
   }
   return best;
 }
@@ -44,13 +52,13 @@ class StatsSummary {
   final int? bestAo12;
 
   factory StatsSummary.from(List<int> timesMs) {
-    final count = timesMs.length;
+    final ok = timesMs.where((t) => t != kDnf).toList();
     return StatsSummary(
-      count: count,
-      best: count == 0 ? null : timesMs.reduce((a, b) => a < b ? a : b),
-      mean: count == 0
+      count: timesMs.length,
+      best: ok.isEmpty ? null : ok.reduce((a, b) => a < b ? a : b),
+      mean: ok.isEmpty
           ? null
-          : (timesMs.fold<int>(0, (a, b) => a + b) / count).round(),
+          : (ok.fold<int>(0, (a, b) => a + b) / ok.length).round(),
       ao5: averageOfLast(timesMs, 5),
       ao12: averageOfLast(timesMs, 12),
       bestAo5: bestAverage(timesMs, 5),

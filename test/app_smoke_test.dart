@@ -21,7 +21,7 @@ void main() {
     await tester.pump();
     final container = ProviderScope.containerOf(
         tester.element(find.byType(Scaffold).first));
-    expect(container.read(freePlayControllerProvider).status, TimerStatus.ready);
+    expect(container.read(freePlayControllerProvider).status, TimerStatus.inspecting);
 
     // Manual start/stop records a solve.
     container.read(freePlayControllerProvider.notifier).toggleManual();

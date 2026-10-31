@@ -42,7 +42,7 @@ void main() {
 
     await tester.tap(find.text('打乱'));
     await tester.pump();
-    expect(c.read(freePlayControllerProvider).status, TimerStatus.ready);
+    expect(c.read(freePlayControllerProvider).status, TimerStatus.inspecting);
 
     // Real drag on a front sticker turns a layer and starts the timer.
     final cube = c.read(nxnCubeProvider(4));
@@ -91,7 +91,7 @@ void main() {
     await tester.pump();
     final puzzle = c.read(pyraminxProvider);
     expect(puzzle.isSolved, isFalse);
-    expect(c.read(freePlayControllerProvider).status, TimerStatus.ready);
+    expect(c.read(freePlayControllerProvider).status, TimerStatus.inspecting);
 
     // Solve it with the solver, as if by finger turns.
     final n = c.read(freePlayControllerProvider.notifier);
