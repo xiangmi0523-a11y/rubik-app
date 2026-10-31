@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Build output of the vendored package
+packages/puzzle_cube/build/
+packages/puzzle_cube/.dart_tool/
