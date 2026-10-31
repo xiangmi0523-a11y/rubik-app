@@ -2,43 +2,76 @@ import 'package:flutter/material.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
 import '../../../../core/cube/app_cube_controller.dart';
+import '../../../../core/nxn/nxn_cube_controller.dart';
+import '../../../../core/nxn/nxn_cube_view.dart';
+import '../../../../core/pyraminx/pyraminx_controller.dart';
+import '../../../../core/pyraminx/pyraminx_model.dart';
+import '../../../../core/pyraminx/pyraminx_view.dart';
+import '../../../puzzles/domain/puzzle_type.dart';
+import '../../application/puzzle_color_input.dart';
 
-/// Half-screen guide: how to hold the physical cube while colouring.
-Future<void> showHoldGuideSheet(BuildContext context) {
+/// Half-screen guide: how to hold the physical puzzle while colouring.
+Future<void> showHoldGuideSheet(BuildContext context, PuzzleType type) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
-    builder: (_) => const FractionallySizedBox(
+    builder: (_) => FractionallySizedBox(
       heightFactor: 0.62,
-      child: _HoldGuide(),
+      child: _HoldGuide(type: type),
     ),
   );
 }
 
 class _HoldGuide extends StatefulWidget {
-  const _HoldGuide();
+  const _HoldGuide({required this.type});
+  final PuzzleType type;
 
   @override
   State<_HoldGuide> createState() => _HoldGuideState();
 }
 
 class _HoldGuideState extends State<_HoldGuide> {
-  // Only the centres are coloured, like the reference app.
-  final _cube = AppCubeController(
-    initialState: PuzzleCubeState.colorless(),
-  );
+  AppCubeController? _cube3;
+  NxnCubeController? _nxn;
+  PyraminxController? _pyraminx;
+
+  @override
+  void initState() {
+    super.initState();
+    final type = widget.type;
+    if (type == PuzzleType.cube3) {
+      // Only the centres are coloured, like the reference app.
+      _cube3 = AppCubeController(initialState: PuzzleCubeState.colorless());
+    } else if (type.isPyraminx) {
+      _pyraminx = PyraminxController(initial: PyraminxState.solved());
+    } else {
+      _nxn = NxnCubeController(type.order!,
+          initial: NxnColorInput.blank(type.order!));
+    }
+  }
 
   @override
   void dispose() {
-    _cube.dispose();
+    _cube3?.dispose();
+    _nxn?.dispose();
+    _pyraminx?.dispose();
     super.dispose();
   }
+
+  bool get _hasFixedCenters =>
+      widget.type == PuzzleType.cube3 || widget.type == PuzzleType.cube5;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final preview = _cube3 != null
+        ? Cube(controller: _cube3!, enableGestures: false)
+        : _nxn != null
+            ? IgnorePointer(child: NxnCubeView(controller: _nxn!))
+            : IgnorePointer(child: PyraminxView(controller: _pyraminx!));
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Column(
@@ -47,15 +80,24 @@ class _HoldGuideState extends State<_HoldGuide> {
           Text('手持姿势',
               textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
           const SizedBox(height: 4),
-          Text('请按下图拿好实体魔方，填色过程中保持不动',
+          Text('请按下图拿好实体${widget.type.label}，填色过程中保持不动',
               textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
-          Expanded(child: Cube(controller: _cube, enableGestures: false)),
-          const _Rule(CubeColors.white, '白色中心', '朝上'),
-          const _Rule(CubeColors.green, '绿色中心', '朝前（面向自己）'),
-          const _Rule(CubeColors.red, '红色中心', '朝右'),
+          Expanded(child: preview),
+          if (_hasFixedCenters) ...const [
+            _Rule(CubeColors.white, '白色中心', '朝上'),
+            _Rule(CubeColors.green, '绿色中心', '朝前（面向自己）'),
+            _Rule(CubeColors.red, '红色中心', '朝右'),
+          ] else
+            Text(
+              widget.type.isPyraminx
+                  ? '金字塔可以任意一面朝向自己，程序会根据中心块自动识别各面颜色。'
+                  : '${widget.type.label}没有固定的中心块，任意姿势拿好即可，'
+                      '程序会自动识别各面颜色。',
+              style: const TextStyle(fontSize: 15),
+            ),
           const SizedBox(height: 6),
           Text(
-            '需要看背面时，请拖动屏幕上的魔方旋转视角，不要转动手里的魔方。',
+            '需要看背面时，请拖动屏幕上的模型旋转视角，不要转动手里的魔方。',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),

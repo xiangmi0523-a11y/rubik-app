@@ -11,7 +11,11 @@ class ColorPaletteBar extends StatelessWidget {
     required this.selected,
     required this.remaining,
     required this.onSelect,
+    this.palette = CubeColors.palette,
   });
+
+  /// Colours to offer (Pyraminx uses four).
+  final List<Color> palette;
 
   final Color selected;
   final int Function(Color color) remaining;
@@ -22,7 +26,7 @@ class ColorPaletteBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        for (final color in CubeColors.palette) _ball(color),
+        for (final color in palette) _ball(color),
       ],
     );
   }
