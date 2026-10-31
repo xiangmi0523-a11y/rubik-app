@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import '../../../core/cube/app_cube_controller.dart';
 import 'package:cuber/cuber.dart' as cuber;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
+import '../../../core/cube/app_cube_controller.dart';
 import '../../../core/cube/cube_facelets.dart';
 import '../domain/solve_result.dart';
 

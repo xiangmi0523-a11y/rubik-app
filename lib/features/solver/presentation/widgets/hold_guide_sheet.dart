@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../../core/cube/app_cube_controller.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
+import '../../../../core/cube/app_cube_controller.dart';
 
 /// Half-screen guide: how to hold the physical cube while colouring.
 Future<void> showHoldGuideSheet(BuildContext context) {
