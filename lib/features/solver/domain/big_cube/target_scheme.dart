@@ -49,6 +49,27 @@ class TargetScheme {
     return TargetScheme._([_opposite[d]!, _opposite[l]!, _opposite[b]!, d, l, b]);
   }
 
+  /// Odd cubes: the colours of the fixed centres, which no turn can change
+  /// relative to each other. Null for even cubes, or if they aren't six
+  /// different scheme colours with the standard opposite pairs.
+  static TargetScheme? fromFixedCenters(NxnCubeState state) {
+    if (state.n.isEven) return null;
+    final f = NxnFacelets(state.n);
+    final colors = f.read(state);
+    final m = state.n - 1;
+    final faces = [
+      for (final nv in NxnFacelets.faceNormals)
+        colors[f.slotAt((nv.$1 * m, nv.$2 * m, nv.$3 * m), nv)],
+    ];
+    if (faces.toSet().length != 6 || !faces.every(_opposite.containsKey)) {
+      return null;
+    }
+    for (var i = 0; i < 3; i++) {
+      if (_opposite[faces[i]] != faces[i + 3]) return null;
+    }
+    return TargetScheme._(faces);
+  }
+
   /// The 24 orientations of this scheme (this one first): the face colours
   /// of a cube coloured with this scheme after each whole-cube rotation.
   List<TargetScheme> orientations() {
