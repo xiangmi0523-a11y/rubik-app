@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/time_format.dart';
+import '../../puzzles/presentation/puzzle_type_selector.dart';
 import '../application/stats_controller.dart';
 import '../domain/averages.dart';
 
@@ -10,8 +11,9 @@ class StatsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final records = ref.watch(statsControllerProvider);
+    final records = ref.watch(filteredRecordsProvider);
     final summary = ref.watch(statsSummaryProvider);
+    final puzzle = ref.watch(statsFilterProvider);
     final times = records.map((r) => r.durationMs).toList();
 
     return Scaffold(
@@ -27,6 +29,10 @@ class StatsPage extends ConsumerWidget {
       ),
       body: Column(
         children: [
+          PuzzleTypeSelector(
+            value: puzzle,
+            onChanged: ref.read(statsFilterProvider.notifier).select,
+          ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: Wrap(
@@ -46,7 +52,7 @@ class StatsPage extends ConsumerWidget {
           const Divider(height: 1),
           Expanded(
             child: records.isEmpty
-                ? const Center(child: Text('还没有成绩，去「自由玩」计时吧'))
+                ? Center(child: Text('还没有${puzzle.label}成绩，去「自由玩」计时吧'))
                 : ListView.builder(
                     itemCount: records.length,
                     itemBuilder: (context, i) {
@@ -101,14 +107,18 @@ class StatsPage extends ConsumerWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('清空所有成绩？'),
+        title: Text('清空所有${ref.read(statsFilterProvider).label}成绩？'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('清空')),
         ],
       ),
     );
-    if (ok == true) ref.read(statsControllerProvider.notifier).clear();
+    if (ok == true) {
+      ref
+          .read(statsControllerProvider.notifier)
+          .clear(ref.read(statsFilterProvider));
+    }
   }
 }
 

@@ -1,12 +1,15 @@
 import 'package:cuber/cuber.dart' as cuber;
-import '../../../core/cube/app_cube_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
+import '../../../core/cube/app_cube_controller.dart';
 import '../../../core/cube/cube_facelets.dart';
+import '../../puzzles/application/puzzle_type_controller.dart';
+import '../../puzzles/domain/puzzle_type.dart';
+import '../../pyraminx/domain/pyraminx_scramble.dart';
 import '../../stats/application/stats_controller.dart';
 
-/// The 3D cube used on the free-play tab.
+/// The 3x3 cube used on the free-play tab (puzzle_cube).
 final freePlayCubeProvider = Provider<AppCubeController>((ref) {
   final controller = AppCubeController(
     moveDuration: const Duration(milliseconds: 200),
@@ -48,34 +51,62 @@ class TimerState {
       );
 }
 
-/// Timer + free-play cube flow:
+/// Timer + free-play flow for whichever puzzle is selected:
 /// scramble -> (ready) -> first turn starts timer -> solved stops & records.
-/// Tapping the timer also starts/stops it manually (for a physical cube).
+/// Tapping the timer also starts/stops it manually (for a physical puzzle).
+/// Switching puzzles resets the timer.
 class FreePlayController extends Notifier<TimerState> {
   @override
-  TimerState build() => const TimerState();
+  TimerState build() {
+    ref.watch(puzzleTypeProvider);
+    return const TimerState();
+  }
 
-  CubeController get _cube => ref.read(freePlayCubeProvider);
+  PuzzleType get _type => ref.read(puzzleTypeProvider);
+  AppCubeController get _cube3 => ref.read(freePlayCubeProvider);
 
   void scramble() {
-    final alg = cuber.Algorithm.scramble(n: 20);
-    final state = PuzzleCubeState.solved();
-    for (final m in alg.moves) {
-      CubeNotation.toQuarterTurns(m).forEach(state.applyMove);
+    final type = _type;
+    final String text;
+    if (type == PuzzleType.cube3) {
+      final alg = cuber.Algorithm.scramble(n: 20);
+      final cube = PuzzleCubeState.solved();
+      for (final m in alg.moves) {
+        CubeNotation.toQuarterTurns(m).forEach(cube.applyMove);
+      }
+      _cube3.replaceState(cube);
+      text = alg.toString();
+    } else if (type.usesNxnEngine) {
+      text = ref.read(nxnCubeProvider(type.order!)).scramble();
+    } else {
+      text = pyraminxScramble();
     }
-    _cube.replaceState(state);
-    this.state = TimerState(status: TimerStatus.ready, scramble: alg.toString());
+    state = TimerState(status: TimerStatus.ready, scramble: text);
   }
 
   void resetCube() {
-    _cube.reset();
+    final type = _type;
+    if (type == PuzzleType.cube3) {
+      _cube3.reset();
+    } else if (type.usesNxnEngine) {
+      ref.read(nxnCubeProvider(type.order!)).reset();
+    }
     state = const TimerState();
+  }
+
+  bool get _isSolved {
+    final type = _type;
+    if (type == PuzzleType.cube3) return _cube3.state.isSolved;
+    if (type.usesNxnEngine) {
+      return ref.read(nxnCubeProvider(type.order!)).isSolved;
+    }
+    return false;
   }
 
   /// Called after every finger turn on the 3D cube.
   void onCubeMove() {
     if (state.status == TimerStatus.ready) _start();
-    if (state.status == TimerStatus.running && _cube.state.isSolved) _stop();
+    if (state.status == TimerStatus.running && _isSolved) _stop();
   }
 
   /// Tap on the timer.
@@ -100,7 +131,7 @@ class FreePlayController extends Notifier<TimerState> {
     state = state.copyWith(status: TimerStatus.stopped, elapsed: elapsed);
     ref
         .read(statsControllerProvider.notifier)
-        .add(elapsed, scramble: state.scramble);
+        .add(elapsed, scramble: state.scramble, puzzle: _type);
   }
 }
 

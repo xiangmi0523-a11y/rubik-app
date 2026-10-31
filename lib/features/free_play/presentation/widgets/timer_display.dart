@@ -6,10 +6,18 @@ import '../../application/free_play_controller.dart';
 
 /// Shows the timer, repainting every frame while running.
 class TimerDisplay extends StatefulWidget {
-  const TimerDisplay({super.key, required this.state, required this.onTap});
+  const TimerDisplay({
+    super.key,
+    required this.state,
+    required this.onTap,
+    this.manualOnly = false,
+  });
 
   final TimerState state;
   final VoidCallback onTap;
+
+  /// Physical-puzzle mode: the timer only starts/stops on tap.
+  final bool manualOnly;
 
   @override
   State<TimerDisplay> createState() => _TimerDisplayState();
@@ -54,8 +62,10 @@ class _TimerDisplayState extends State<TimerDisplay>
     };
     final hint = switch (s.status) {
       TimerStatus.idle => '点「打乱」开始，或点这里手动计时',
-      TimerStatus.ready => '转动第一下即开始计时',
-      TimerStatus.running => '还原后自动停止（点这里手动停止）',
+      TimerStatus.ready =>
+        widget.manualOnly ? '按打乱公式打乱后，点这里开始计时' : '转动第一下即开始计时',
+      TimerStatus.running =>
+        widget.manualOnly ? '还原后点这里停止' : '还原后自动停止（点这里手动停止）',
       TimerStatus.stopped => '成绩已记录',
     };
     return GestureDetector(
