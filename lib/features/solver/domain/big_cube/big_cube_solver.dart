@@ -21,6 +21,16 @@ class PhaseRange {
   int get length => end - start;
 }
 
+/// One player turn of a solution (see [BigCubeSolution.blockSteps]).
+class BlockStep {
+  const BlockStep(this.phase, this.block, this.note);
+  final ReductionPhase phase;
+  final NxnBlockMove block;
+
+  /// Description of the formula the turn belongs to.
+  final String note;
+}
+
 /// Result of [BigCubeSolver.solve].
 class BigCubeSolution {
   BigCubeSolution._({
@@ -41,6 +51,34 @@ class BigCubeSolution {
 
   /// All moves, in order.
   List<NxnMove> get moves => [for (final s in steps) ...s.moves];
+
+  /// The solution as player turns: within each phase, same-axis moves with
+  /// equal turns on adjacent layers become one wide turn (e.g. U2 2U2 →
+  /// Uw2). Never crosses a phase; each turn keeps the description of the
+  /// formula its first layer came from. Same effect as [moves].
+  List<BlockStep> get blockSteps {
+    final out = <BlockStep>[];
+    var i = 0;
+    while (i < steps.length) {
+      var j = i;
+      while (j < steps.length && steps[j].phase == steps[i].phase) {
+        j++;
+      }
+      final moves = <NxnMove>[];
+      final notes = <String>[];
+      for (final s in steps.sublist(i, j)) {
+        for (final m in s.moves) {
+          moves.add(m);
+          notes.add(s.description);
+        }
+      }
+      for (final (block, first) in NxnBlockMove.groupWithSource(moves)) {
+        out.add(BlockStep(steps[i].phase, block, notes[first]));
+      }
+      i = j;
+    }
+    return out;
+  }
 
   /// Contiguous move ranges per phase, in solve order (phases with no moves
   /// are left out).

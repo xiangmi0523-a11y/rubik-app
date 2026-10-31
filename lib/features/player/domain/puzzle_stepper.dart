@@ -11,6 +11,12 @@ import '../../../core/pyraminx/pyraminx_controller.dart';
 import '../../../core/pyraminx/pyraminx_model.dart';
 import '../../../core/pyraminx/pyraminx_view.dart';
 
+/// Duration of one animated turn in the player at 1× (2× / 4× divide it).
+const playerTurnDuration = Duration(milliseconds: 480);
+
+/// Pause between turns during playback at 1×.
+const playerStepGap = Duration(milliseconds: 200);
+
 /// A named section of a script's moves, [start, end) — e.g. one phase of a
 /// big-cube solve (拼中心, 配对棱块, ...).
 class PlayerPhase {
@@ -87,10 +93,8 @@ class _Cube3Stepper implements PuzzleStepper {
   _Cube3Stepper(this.script)
       : cube = AppCubeController(
           initialState: CubeFacelets.build(script.colors),
-          moveDuration: _duration,
+          moveDuration: playerTurnDuration,
         );
-
-  static const _duration = Duration(milliseconds: 320);
 
   final Cube3Script script;
   final AppCubeController cube;
@@ -117,10 +121,11 @@ class _Cube3Stepper implements PuzzleStepper {
   }
 
   @override
-  set speed(double value) => cube.moveDuration = _duration * (1 / value);
+  set speed(double value) =>
+      cube.moveDuration = playerTurnDuration * (1 / value);
 
   @override
-  Widget buildView() => Cube(controller: cube);
+  Widget buildView() => Cube(controller: cube, highlightTurns: true);
 
   @override
   void dispose() => cube.dispose();
@@ -129,24 +134,39 @@ class _Cube3Stepper implements PuzzleStepper {
 // ── N×N (in-house engine) ──────────────────────────────────────────────────
 
 class NxnScript extends PlayerScript {
+  /// One player step per single-layer move.
   NxnScript({
     required this.initial,
-    required this.steps,
+    required List<NxnMove> steps,
     this.phases = const [],
     this.notes,
-  }) : assert(notes == null || notes.length == steps.length);
+  })  : blocks = [for (final m in steps) NxnBlockMove.single(m)],
+        assert(notes == null || notes.length == steps.length);
+
+  /// One player step per turn; a wide turn animates its layers together.
+  NxnScript.blocks({
+    required this.initial,
+    required this.blocks,
+    this.phases = const [],
+    this.notes,
+  }) : assert(notes == null || notes.length == blocks.length);
 
   final NxnCubeState initial;
-  final List<NxnMove> steps;
+
+  /// The turns, one per step.
+  final List<NxnBlockMove> blocks;
 
   @override
   final List<PlayerPhase> phases;
 
-  /// Optional note per move (same length as [steps]).
+  /// Optional note per step (same length as [blocks]).
   final List<String>? notes;
 
+  /// The same solution as single-layer moves.
+  List<NxnMove> get steps => [for (final b in blocks) ...b.moves];
+
   @override
-  late final List<String> moves = [for (final m in steps) m.notation(initial.n)];
+  late final List<String> moves = [for (final b in blocks) b.notation(initial.n)];
 
   @override
   String? noteAt(int index) => notes?[index];
@@ -169,19 +189,28 @@ class _NxnStepper implements PuzzleStepper {
 
   @override
   void animate(int index, {required bool forward}) {
-    final m = script.steps[index];
-    cube.playSequence([forward ? m : m.inverse]);
+    final b = script.blocks[index];
+    cube.playBlocks([forward ? b : b.inverse]);
   }
 
   @override
-  void show(int count) => cube.replaceState(
-      script.initial.copy()..applyAll(script.steps.take(count)));
+  void show(int count) {
+    final s = script.initial.copy();
+    for (final b in script.blocks.take(count)) {
+      s.applyBlock(b);
+    }
+    cube.replaceState(s);
+  }
 
   @override
   set speed(double value) => cube.speed = value;
 
   @override
-  Widget buildView() => NxnCubeView(controller: cube);
+  Widget buildView() => NxnCubeView(
+        controller: cube,
+        moveDuration: playerTurnDuration,
+        highlightTurns: true,
+      );
 
   @override
   void dispose() => cube.dispose();
@@ -229,7 +258,11 @@ class _PyraminxStepper implements PuzzleStepper {
 
   @override
   Widget buildView() =>
-      PyraminxView(controller: puzzle, moveDuration: const Duration(milliseconds: 360));
+      PyraminxView(
+        controller: puzzle,
+        moveDuration: playerTurnDuration,
+        highlightTurns: true,
+      );
 
   @override
   void dispose() => puzzle.dispose();

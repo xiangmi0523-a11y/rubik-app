@@ -13,5 +13,6 @@ export 'src/rendering/cube_geometry.dart';
 export 'src/rendering/cube_hit_test.dart';
 export 'src/rendering/cubie_builder.dart';
 export 'src/rendering/realistic_cube_renderer.dart';
+export 'src/rendering/turn_highlight.dart';
 export 'src/widgets/cube_controller.dart'
-    show Cube, CubeController, cubeViewScale;
+    show Cube, CubeController, CubePainter, cubeViewScale;

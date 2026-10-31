@@ -26,7 +26,17 @@ class CubieFaceDraw {
 /// A cubie: its visible faces and a depth for back-to-front sorting.
 class CubieDraw {
   /// Creates a cubie draw.
-  const CubieDraw({required this.depth, required this.faces, this.group = 0});
+  const CubieDraw({
+    required this.depth,
+    required this.faces,
+    this.group = 0,
+    this.brightness = 1,
+  });
+
+  /// Light multiplier for the whole cubie (plastic and stickers), 1 = normal.
+  /// Used to dim the layers that aren't turning; colours stay recognisable
+  /// and sticker outlines are unchanged.
+  final double brightness;
 
   /// Larger = nearer to the viewer.
   final double depth;
@@ -106,7 +116,7 @@ class RealisticCubeRenderer {
       });
     for (final cubie in sorted) {
       for (final face in cubie.faces) {
-        _paintFace(canvas, face);
+        _paintFace(canvas, face, cubie.brightness);
       }
     }
   }
@@ -128,22 +138,27 @@ class RealisticCubeRenderer {
       math.pow(math.max(0, n.dot(_half)), shininess).toDouble();
 
   Color _shade(Color base, Vector3 n,
-      {double spec = 0, double shininess = 40,}) {
-    final k = _ambient + _diffuse * _diffuseTerm(n);
-    final s = spec * _specular(n, shininess);
+      {double spec = 0, double shininess = 40, double brightness = 1,}) {
+    final k = (_ambient + _diffuse * _diffuseTerm(n)) * brightness;
+    final s = spec * _specular(n, shininess) * brightness;
     int ch(double c) => ((c * k + s) * 255).round().clamp(0, 255);
     return Color.fromARGB(255, ch(base.r), ch(base.g), ch(base.b));
   }
 
-  void _paintFace(Canvas canvas, CubieFaceDraw face) {
+  void _paintFace(Canvas canvas, CubieFaceDraw face, double brightness) {
     // Plastic body: fills the whole cell so neighbouring cubies touch; the
     // seam between them is a hairline groove, like a real speed cube.
     final body = _roundedRect(face.at, 1.0, style.bodyRadius);
     canvas.drawPath(
       body,
       Paint()
-        ..color =
-            _shade(style.bodyColor, face.normal, spec: 0.3, shininess: 16),
+        ..color = _shade(
+          style.bodyColor,
+          face.normal,
+          spec: 0.3,
+          shininess: 16,
+          brightness: brightness,
+        ),
     );
     canvas.drawPath(
       body,
@@ -160,7 +175,7 @@ class RealisticCubeRenderer {
         _roundedRect(face.at, style.stickerInset, style.stickerRadius);
     final c = face.at(0, 0);
     final reach = (face.at(1, 1) - face.at(-1, -1)).distance / 2;
-    _paintSticker(canvas, sticker, c, reach, face.normal, color);
+    _paintSticker(canvas, sticker, c, reach, face.normal, color, brightness);
   }
 
   /// Paints one non-square panel (e.g. a Pyraminx triangle) with the same
@@ -175,12 +190,18 @@ class RealisticCubeRenderer {
     Color? color,
     Offset center = Offset.zero,
     double reach = 1,
+    double brightness = 1,
   }) {
     canvas.drawPath(
       body,
       Paint()
-        ..color =
-            _shade(style.bodyColor, normal, spec: 0.3, shininess: 16),
+        ..color = _shade(
+          style.bodyColor,
+          normal,
+          spec: 0.3,
+          shininess: 16,
+          brightness: brightness,
+        ),
     );
     canvas.drawPath(
       body,
@@ -191,13 +212,13 @@ class RealisticCubeRenderer {
         ..color = Colors.black.withValues(alpha: 0.9),
     );
     if (sticker != null && color != null) {
-      _paintSticker(canvas, sticker, center, reach, normal, color);
+      _paintSticker(canvas, sticker, center, reach, normal, color, brightness);
     }
   }
 
   void _paintSticker(Canvas canvas, Path sticker, Offset c, double reach,
-      Vector3 normal, Color color,) {
-    final lit = _shade(color, normal);
+      Vector3 normal, Color color, [double brightness = 1,]) {
+    final lit = _shade(color, normal, brightness: brightness);
     // Glossy gradient: brighter towards the light, darker away from it.
     final towards = Offset(_light.x, _light.y);
     final from = c + towards * reach;
@@ -206,7 +227,7 @@ class RealisticCubeRenderer {
       sticker,
       Paint()
         ..shader = ui.Gradient.linear(from, to, [
-          Color.lerp(lit, Colors.white, 0.16)!,
+          Color.lerp(lit, Colors.white, 0.16 * brightness)!,
           lit,
           Color.lerp(lit, Colors.black, 0.14)!,
         ], [
@@ -216,7 +237,7 @@ class RealisticCubeRenderer {
         ]),
     );
     // Specular sheen on faces turned toward the light.
-    final spec = _specular(normal, 36);
+    final spec = _specular(normal, 36) * brightness;
     if (spec > 0.02) {
       canvas.drawPath(
         sticker,

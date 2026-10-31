@@ -21,14 +21,14 @@ class NxnCubeController extends ChangeNotifier {
   double _rotX = initialRotationX;
   double _rotY = initialRotationY;
   NxnTurn? _turn;
-  final Queue<NxnMove> _queue = Queue();
-  NxnMove? _pending;
+  final Queue<NxnBlockMove> _queue = Queue();
+  NxnBlockMove? _pending;
 
   /// Playback speed factor for queued animations (1 = normal).
   double speed = 1;
 
-  /// Move currently animating (driven by an [NxnCubeView]), or null.
-  NxnMove? get pending => _pending;
+  /// Turn currently animating (driven by an [NxnCubeView]), or null.
+  NxnBlockMove? get pending => _pending;
   bool get hasQueuedWork => _pending != null || _queue.isNotEmpty;
 
   NxnCubeState get state => _state;
@@ -84,9 +84,13 @@ class NxnCubeController extends ChangeNotifier {
     }
   }
 
-  /// Queues animated moves.
-  void playSequence(Iterable<NxnMove> moves) {
-    _queue.addAll(moves);
+  /// Queues animated single-layer moves.
+  void playSequence(Iterable<NxnMove> moves) =>
+      playBlocks(moves.map(NxnBlockMove.single));
+
+  /// Queues animated turns; a wide turn animates all its layers together.
+  void playBlocks(Iterable<NxnBlockMove> blocks) {
+    _queue.addAll(blocks);
     _startNext();
   }
 
@@ -102,7 +106,7 @@ class NxnCubeController extends ChangeNotifier {
     if (move == null) return;
     _pending = null;
     _turn = null;
-    _state.apply(move);
+    _state.applyBlock(move);
     notifyListeners();
     _startNext();
   }

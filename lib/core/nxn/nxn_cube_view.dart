@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:puzzle_cube/puzzle_cube.dart' show TurnHighlight;
 import 'package:vector_math/vector_math_64.dart' show Matrix4, Vector3;
 
 import 'nxn_cube_controller.dart';
@@ -17,6 +19,7 @@ class NxnCubeView extends StatefulWidget {
     this.onMove,
     this.onStickerTap,
     this.moveDuration = const Duration(milliseconds: 260),
+    this.highlightTurns = false,
   });
 
   final NxnCubeController controller;
@@ -29,6 +32,10 @@ class NxnCubeView extends StatefulWidget {
 
   /// Duration of each queued (programmatic) move animation.
   final Duration moveDuration;
+
+  /// Keep the turning layers bright and dim the rest while queued turns
+  /// play (the player). Off: the cube looks exactly as before.
+  final bool highlightTurns;
 
   @override
   State<NxnCubeView> createState() => _NxnCubeViewState();
@@ -66,13 +73,22 @@ class _NxnCubeViewState extends State<NxnCubeView>
           if (s == AnimationStatus.completed) {
             _anim.reset();
             _animating = null;
+            _highlight.end();
             widget.controller.commitPending();
           }
         });
 
+  /// Turning layers bright, the rest dimmed (only with [highlightTurns]).
+  final TurnHighlight _highlight = TurnHighlight();
+  late final Ticker _highlightTicker = createTicker(_onHighlightTick);
+  final _highlightRepaint = ValueNotifier<int>(0);
+  Duration _highlightLast = Duration.zero;
+  NxnCubeState? _shownState;
+
   @override
   void initState() {
     super.initState();
+    _shownState = widget.controller.state;
     widget.controller.addListener(_onController);
   }
 
@@ -82,26 +98,61 @@ class _NxnCubeViewState extends State<NxnCubeView>
     if (old.controller != widget.controller) {
       old.controller.removeListener(_onController);
       widget.controller.addListener(_onController);
+      _resetHighlight();
     }
+    if (old.highlightTurns && !widget.highlightTurns) _resetHighlight();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onController);
+    _highlightTicker.dispose();
+    _highlightRepaint.dispose();
     _snap.dispose();
     _anim.dispose();
     super.dispose();
   }
 
+  void _resetHighlight() {
+    _highlight.reset();
+    if (_highlightTicker.isActive) _highlightTicker.stop();
+    _highlightRepaint.value++;
+  }
+
+  void _onHighlightTick(Duration elapsed) {
+    final dt = elapsed - _highlightLast;
+    _highlightLast = elapsed;
+    final changing = _highlight.tick(dt);
+    _highlightRepaint.value++;
+    if (!changing) _highlightTicker.stop();
+  }
+
   /// The queued move currently being animated. Guards against restarting:
   /// `forward(from: 0)` notifies listeners before `isAnimating` turns true.
-  NxnMove? _animating;
+  NxnBlockMove? _animating;
 
   void _onController() {
+    // A replaced state (jump, reset) shows no turn: drop any highlight.
+    if (!identical(_c.state, _shownState)) {
+      _shownState = _c.state;
+      _resetHighlight();
+    }
     final pending = _c.pending;
     if (pending == null || identical(pending, _animating)) return;
     _animating = pending;
     _anim.duration = widget.moveDuration * (1 / _c.speed);
+    if (widget.highlightTurns) {
+      // Exactly the cubies the painter rotates for this turn.
+      final turn = NxnTurn.of(pending, 0);
+      _highlight.begin(
+        [for (final c in _c.state.cubies) if (turn.turns(c.pos)) c.pos],
+        _anim.duration!,
+      );
+      if (!_highlightTicker.isActive) {
+        _highlightLast = Duration.zero;
+        _highlightTicker.start();
+      }
+    }
     _anim.forward(from: 0);
   }
 
@@ -110,7 +161,7 @@ class _NxnCubeViewState extends State<NxnCubeView>
     if (move == null) return;
     final t = Curves.easeInOut.transform(_anim.value);
     final target = (move.turns == 2 ? 2 : move.turns) * math.pi / 2;
-    _c.turn = NxnTurn(move.axis, move.layer, target * t);
+    _c.turn = NxnTurn.of(move, target * t);
   }
 
   void _onTapUp(TapUpDetails d) {
@@ -254,7 +305,7 @@ class _NxnCubeViewState extends State<NxnCubeView>
           onPanEnd: _onPanEnd,
           onTapUp: widget.onStickerTap == null ? null : _onTapUp,
           child: ListenableBuilder(
-            listenable: _c,
+            listenable: Listenable.merge([_c, _highlightRepaint]),
             builder: (context, _) => CustomPaint(
               size: _size,
               painter: NxnCubePainter(
@@ -262,6 +313,8 @@ class _NxnCubeViewState extends State<NxnCubeView>
                 rotationX: _c.rotationX,
                 rotationY: _c.rotationY,
                 turn: _c.turn,
+                brightness:
+                    widget.highlightTurns ? _highlight.brightnessOf : null,
               ),
             ),
           ),

@@ -67,7 +67,8 @@ void _expectBigCubeSolution(WidgetTester tester, int n) {
   expect(labels.first, '拼中心');
   expect(labels.last, '三阶求解');
   expect(labels, contains('配对棱块'));
-  expect(script.phases.last.end, script.steps.length);
+  expect(script.phases.last.end, script.blocks.length);
+  expect(script.moves, hasLength(script.blocks.length));
   for (var i = 0; i < script.phases.length; i++) {
     final tile = find.byKey(ValueKey('phase$i'));
     expect(find.descendant(of: tile, matching: find.text(script.phases[i].label)),

@@ -199,18 +199,23 @@ Future<PuzzleSolveOutcome> solveBigCube(
         ),
     };
   }
-  final notes = [
-    for (final step in result.steps)
-      for (var i = 0; i < step.moves.length; i++) step.description,
-  ];
-  return PuzzleSolveOk(NxnScript(
+  // Player steps: wide turns grouped inside each phase.
+  final turns = result.blockSteps;
+  final phases = <PlayerPhase>[];
+  for (var i = 0; i < turns.length; i++) {
+    final label = turns[i].phase.label;
+    if (phases.isNotEmpty && phases.last.label == label) {
+      phases[phases.length - 1] =
+          PlayerPhase(label: label, start: phases.last.start, end: i + 1);
+    } else {
+      phases.add(PlayerPhase(label: label, start: i, end: i + 1));
+    }
+  }
+  return PuzzleSolveOk(NxnScript.blocks(
     initial: start,
-    steps: result.moves,
-    phases: [
-      for (final p in result.phases)
-        PlayerPhase(label: p.phase.label, start: p.start, end: p.end),
-    ],
-    notes: notes,
+    blocks: [for (final t in turns) t.block],
+    phases: phases,
+    notes: [for (final t in turns) t.note],
   ));
 }
 

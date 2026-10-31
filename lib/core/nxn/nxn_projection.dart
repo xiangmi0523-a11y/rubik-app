@@ -5,15 +5,41 @@ import 'package:vector_math/vector_math_64.dart';
 
 import 'nxn_cube_state.dart';
 
-/// A layer being turned by a finger or an animation.
+/// Layers being turned by a finger or an animation: [layer]..[to] on [axis]
+/// (one layer unless [to] is given).
+///
+/// [turns] is the single test of which cubies rotate; the painter and the
+/// turn highlight both use it, for single-layer and wide turns alike.
 class NxnTurn {
-  const NxnTurn(this.axis, this.layer, this.angle);
+  const NxnTurn(this.axis, this.layer, this.angle, {int? to}) : to = to ?? layer;
+
+  /// The turn of [block], [angle] radians into it.
+  NxnTurn.of(NxnBlockMove block, this.angle)
+      : axis = block.axis,
+        layer = block.from,
+        to = block.to;
 
   final int axis;
+
+  /// Lowest turning layer (doubled coordinates).
   final int layer;
+
+  /// Highest turning layer.
+  final int to;
 
   /// Radians, right-handed about +axis.
   final double angle;
+
+  bool containsLayer(int l) => l >= layer && l <= to;
+
+  /// Whether the cubie at [pos] is part of the turn.
+  bool turns(IVec pos) => containsLayer(axisOf(pos, axis));
+
+  /// -1 below the turning block, 0 inside it, 1 above it.
+  int sideOf(IVec pos) {
+    final l = axisOf(pos, axis);
+    return l < layer ? -1 : (l > to ? 1 : 0);
+  }
 }
 
 /// Camera + perspective for an n×n cube. World units: one cubie = 1, so the

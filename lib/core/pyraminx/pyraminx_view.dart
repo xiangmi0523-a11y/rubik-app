@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:puzzle_cube/puzzle_cube.dart' show TurnHighlight;
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 import 'pyraminx_controller.dart';
@@ -18,12 +20,17 @@ class PyraminxView extends StatefulWidget {
     this.onMove,
     this.onSlotTap,
     this.moveDuration = const Duration(milliseconds: 280),
+    this.highlightTurns = false,
   });
 
   final PyraminxController controller;
   final ValueChanged<PyraminxMove>? onMove;
   final ValueChanged<int>? onSlotTap;
   final Duration moveDuration;
+
+  /// Keep the turning part bright and dim the rest while queued turns play
+  /// (the player). Off: the puzzle looks exactly as before.
+  final bool highlightTurns;
 
   @override
   State<PyraminxView> createState() => _PyraminxViewState();
@@ -48,9 +55,17 @@ class _PyraminxViewState extends State<PyraminxView>
           if (s == AnimationStatus.completed) {
             _anim.reset();
             _animating = null;
+            _highlight.end();
             widget.controller.commitPending();
           }
         });
+
+  /// Turning part bright, the rest dimmed (only with [highlightTurns]).
+  final TurnHighlight _highlight = TurnHighlight();
+  late final Ticker _highlightTicker = createTicker(_onHighlightTick);
+  final _highlightRepaint = ValueNotifier<int>(0);
+  Duration _highlightLast = Duration.zero;
+  PyraminxState? _shownState;
 
   Size _size = Size.zero;
   _Mode _mode = _Mode.none;
@@ -67,6 +82,7 @@ class _PyraminxViewState extends State<PyraminxView>
   @override
   void initState() {
     super.initState();
+    _shownState = _c.state;
     _c.addListener(_onController);
   }
 
@@ -76,15 +92,33 @@ class _PyraminxViewState extends State<PyraminxView>
     if (old.controller != widget.controller) {
       old.controller.removeListener(_onController);
       widget.controller.addListener(_onController);
+      _resetHighlight();
     }
+    if (old.highlightTurns && !widget.highlightTurns) _resetHighlight();
   }
 
   @override
   void dispose() {
     _c.removeListener(_onController);
+    _highlightTicker.dispose();
+    _highlightRepaint.dispose();
     _snap.dispose();
     _anim.dispose();
     super.dispose();
+  }
+
+  void _resetHighlight() {
+    _highlight.reset();
+    if (_highlightTicker.isActive) _highlightTicker.stop();
+    _highlightRepaint.value++;
+  }
+
+  void _onHighlightTick(Duration elapsed) {
+    final dt = elapsed - _highlightLast;
+    _highlightLast = elapsed;
+    final changing = _highlight.tick(dt);
+    _highlightRepaint.value++;
+    if (!changing) _highlightTicker.stop();
   }
 
   /// The queued move currently being animated. Guards against restarting:
@@ -92,10 +126,27 @@ class _PyraminxViewState extends State<PyraminxView>
   PyraminxMove? _animating;
 
   void _onController() {
+    // A replaced state (jump, reset) shows no turn: drop any highlight.
+    if (!identical(_c.state, _shownState)) {
+      _shownState = _c.state;
+      _resetHighlight();
+    }
     final pending = _c.pending;
     if (pending == null || identical(pending, _animating)) return;
     _animating = pending;
     _anim.duration = widget.moveDuration * (1 / _c.speed);
+    if (widget.highlightTurns) {
+      // Exactly the sticker slots the painter rotates for this turn.
+      final slots = PyraminxGeometry.slots;
+      _highlight.begin([
+        for (var i = 0; i < slots.length; i++)
+          if (PyraminxGeometry.inRegion(slots[i], pending.axis, pending.tip)) i,
+      ], _anim.duration!);
+      if (!_highlightTicker.isActive) {
+        _highlightLast = Duration.zero;
+        _highlightTicker.start();
+      }
+    }
     _anim.forward(from: 0);
   }
 
@@ -225,7 +276,7 @@ class _PyraminxViewState extends State<PyraminxView>
           onPanEnd: _onPanEnd,
           onTapUp: widget.onSlotTap == null ? null : _onTapUp,
           child: ListenableBuilder(
-            listenable: _c,
+            listenable: Listenable.merge([_c, _highlightRepaint]),
             builder: (context, _) => CustomPaint(
               size: _size,
               painter: PyraminxPainter(
@@ -233,6 +284,8 @@ class _PyraminxViewState extends State<PyraminxView>
                 rotationX: _c.rotationX,
                 rotationY: _c.rotationY,
                 turn: _c.turn,
+                brightness:
+                    widget.highlightTurns ? (i) => _highlight.brightnessOf(i) : null,
               ),
             ),
           ),

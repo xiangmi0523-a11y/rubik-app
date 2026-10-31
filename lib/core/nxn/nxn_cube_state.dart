@@ -80,6 +80,129 @@ class NxnMove {
   String toString() => 'NxnMove($axis, $layer, $turns)';
 }
 
+/// A turn of the contiguous block of layers [from]..[to] (doubled
+/// coordinates, `from <= to`) on one axis, every layer by the same [turns]:
+/// a single-layer turn (width 1), a wide turn (Rw, 3Rw), a block of inner
+/// slices (2-3Rw), or all layers (a whole-cube rotation x / y / z).
+///
+/// Its effect is exactly its single-layer [moves], which commute.
+class NxnBlockMove {
+  const NxnBlockMove(this.axis, this.from, this.to, this.turns)
+      : assert(from <= to);
+
+  NxnBlockMove.single(NxnMove m) : this(m.axis, m.layer, m.layer, m.turns);
+
+  final int axis;
+
+  /// Lowest and highest layer of the block (doubled coordinates).
+  final int from;
+  final int to;
+  final int turns;
+
+  /// Number of layers turned.
+  int get width => (to - from) ~/ 2 + 1;
+
+  /// Whether a cubie whose coordinate along [axis] is [layer] turns.
+  bool containsLayer(int layer) => layer >= from && layer <= to;
+
+  List<int> get layers => [for (var l = from; l <= to; l += 2) l];
+
+  /// The equivalent single-layer turns.
+  List<NxnMove> get moves => [for (final l in layers) NxnMove(axis, l, turns)];
+
+  NxnBlockMove get inverse =>
+      NxnBlockMove(axis, from, to, turns == 2 ? 2 : -turns);
+
+  /// SiGN notation on an order-[n] cube: R, 2R (one layer); Rw, 3Rw (wide,
+  /// from a face); 2-3Rw (inner block); x, y', z2 (every layer).
+  String notation(int n) {
+    final m = n - 1;
+    if (width == 1) return NxnMove(axis, from, turns).notation(n);
+    if (from == -m && to == m) {
+      // x follows R, y follows U, z follows F.
+      final suffix = turns == 2 ? '2' : (turns == -1 ? '' : "'");
+      return '${'xyz'[axis]}$suffix';
+    }
+    // Named from the face it touches; an inner block from the positive face.
+    final positive = to == m || from != -m;
+    final face = const [['R', 'L'], ['U', 'D'], ['F', 'B']][axis][positive ? 0 : 1];
+    final near = positive ? (m - to) ~/ 2 + 1 : (m + from) ~/ 2 + 1;
+    final far = positive ? (m - from) ~/ 2 + 1 : (m + to) ~/ 2 + 1;
+    final clockwise = positive ? turns == -1 : turns == 1;
+    final suffix = turns == 2 ? '2' : (clockwise ? '' : "'");
+    final prefix = near == 1 ? (far == 2 ? '' : '$far') : '$near-$far';
+    return '$prefix${face}w$suffix';
+  }
+
+  /// Groups [moves] into block moves without changing their effect. Only
+  /// moves inside one run of consecutive same-axis moves (which commute) are
+  /// combined: equal turns on adjacent layers become one block. Returns each
+  /// block with the index (in [moves]) of its first move.
+  static List<(NxnBlockMove, int)> groupWithSource(List<NxnMove> moves) {
+    final out = <(NxnBlockMove, int)>[];
+    var i = 0;
+    while (i < moves.length) {
+      var j = i;
+      while (j < moves.length && moves[j].axis == moves[i].axis) {
+        j++;
+      }
+      final run = [for (var k = i; k < j; k++) k];
+      final layers = {for (final k in run) moves[k].layer};
+      if (layers.length != run.length) {
+        // A layer turned twice in one run: keep the moves as they are.
+        for (final k in run) {
+          out.add((NxnBlockMove.single(moves[k]), k));
+        }
+      } else {
+        final blocks = <(NxnBlockMove, int)>[];
+        final byTurns = <int, List<int>>{};
+        for (final k in run) {
+          byTurns.putIfAbsent(moves[k].turns, () => []).add(k);
+        }
+        for (final group in byTurns.values) {
+          group.sort((a, b) => moves[a].layer.compareTo(moves[b].layer));
+          var start = 0;
+          for (var g = 1; g <= group.length; g++) {
+            if (g < group.length &&
+                moves[group[g]].layer == moves[group[g - 1]].layer + 2) {
+              continue;
+            }
+            final chain = group.sublist(start, g);
+            final first = chain.reduce((a, b) => a < b ? a : b);
+            final m = moves[chain.first];
+            blocks.add((
+              NxnBlockMove(m.axis, m.layer, moves[chain.last].layer, m.turns),
+              first,
+            ));
+            start = g;
+          }
+        }
+        blocks.sort((a, b) => a.$2.compareTo(b.$2));
+        out.addAll(blocks);
+      }
+      i = j;
+    }
+    return out;
+  }
+
+  static List<NxnBlockMove> group(List<NxnMove> moves) =>
+      [for (final (b, _) in groupWithSource(moves)) b];
+
+  @override
+  bool operator ==(Object other) =>
+      other is NxnBlockMove &&
+      other.axis == axis &&
+      other.from == from &&
+      other.to == to &&
+      other.turns == turns;
+
+  @override
+  int get hashCode => Object.hash(axis, from, to, turns);
+
+  @override
+  String toString() => 'NxnBlockMove($axis, $from..$to, $turns)';
+}
+
 class NxnCubie {
   NxnCubie(this.pos, this.stickers);
 
@@ -156,6 +279,8 @@ class NxnCubeState {
   }
 
   void applyAll(Iterable<NxnMove> moves) => moves.forEach(apply);
+
+  void applyBlock(NxnBlockMove block) => applyAll(block.moves);
 
   /// Every face shows a single colour (any orientation counts as solved).
   bool get isSolved {

@@ -16,12 +16,16 @@ class PyraminxPainter extends CustomPainter {
     required this.rotationX,
     required this.rotationY,
     this.turn,
+    this.brightness,
   });
 
   final List<int> colors;
   final double rotationX;
   final double rotationY;
   final PyraminxTurn? turn;
+
+  /// Light multiplier per sticker slot (the turn highlight); null = 1.
+  final double Function(int slot)? brightness;
 
   static final _renderer = RealisticCubeRenderer();
 
@@ -91,7 +95,11 @@ class PyraminxPainter extends CustomPainter {
     Vector3 dir(Vector3 n) => rot == null ? n : rot.rotated3(Vector3.copy(n));
 
     final panels = <(double, VoidCallback)>[];
-    void addPanel(List<Vector3> corners, Vector3 normal, int? color) {
+    // The inner cut face of a part is lit like that part's stickers.
+    final partBrightness =
+        indices.isEmpty ? 1.0 : (brightness?.call(indices.first) ?? 1.0);
+    void addPanel(List<Vector3> corners, Vector3 normal, int? color,
+        double light) {
       final w = corners.map(world).toList();
       final centroid = (w[0] + w[1] + w[2]) / 3;
       final vc = proj.toView(centroid);
@@ -120,6 +128,7 @@ class PyraminxPainter extends CustomPainter {
             normal: screenNormal,
             center: center,
             reach: (pts[0] - center).distance,
+            brightness: light,
           );
         },
       ));
@@ -127,9 +136,9 @@ class PyraminxPainter extends CustomPainter {
 
     for (final i in indices) {
       final s = PyraminxGeometry.slots[i];
-      addPanel(s.corners, s.normal, colors[i]);
+      addPanel(s.corners, s.normal, colors[i], brightness?.call(i) ?? 1);
     }
-    if (cap != null) addPanel(cap.$1, cap.$2, null);
+    if (cap != null) addPanel(cap.$1, cap.$2, null, partBrightness);
 
     panels.sort((a, b) => a.$1.compareTo(b.$1));
     for (final (_, draw) in panels) {

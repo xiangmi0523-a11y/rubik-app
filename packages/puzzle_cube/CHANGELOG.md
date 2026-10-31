@@ -46,3 +46,7 @@
   `CubeRenderStyle` and `cubeViewScale` for reuse by other puzzles.
 - `CubeController.moveDuration` is now mutable and is re-read before every
   animated turn, so the app's player can switch between 1×, 2× and 4×.
+- Optional turn highlight: `Cube(highlightTurns: true)` keeps the turning
+  layer bright and dims the rest (`TurnHighlight`, exported), using a new
+  `brightness` on `CubieDraw` / `paintPanel`. Off by default, so existing
+  screens look exactly as before. `CubePainter` is now public (for tests).

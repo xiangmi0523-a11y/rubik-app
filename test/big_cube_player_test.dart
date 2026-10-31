@@ -30,6 +30,15 @@ Future<ProviderContainer> _pumpPlayer(WidgetTester tester, PlayerScript script) 
   return ProviderScope.containerOf(tester.element(find.byType(PlayerPage)));
 }
 
+/// The cube after the first [count] player steps (turns) of [script].
+NxnCubeState _after(NxnScript script, int count) {
+  final s = script.initial.copy();
+  for (final b in script.blocks.take(count)) {
+    s.applyBlock(b);
+  }
+  return s;
+}
+
 NxnCubeController _cubeOf(WidgetTester tester) =>
     tester.widget<NxnCubeView>(find.byType(NxnCubeView)).controller;
 
@@ -59,7 +68,7 @@ void main() {
       expect(c.read(ctrl).index, p.start);
       expect(c.read(ctrl).playing, isFalse);
       expect(find.textContaining('${p.label} 0/${p.length}'), findsOneWidget);
-      final expected = script.initial.copy()..applyAll(script.steps.take(p.start));
+      final expected = _after(script, p.start);
       final shown = _cubeOf(tester).state;
       for (final cubie in expected.cubies) {
         for (final e in cubie.stickers.entries) {
@@ -118,7 +127,7 @@ void main() {
     expect(c.read(ctrl).index, paused);
 
     // The shown cube matches the script at the paused index.
-    final expected = script.initial.copy()..applyAll(script.steps.take(paused));
+    final expected = _after(script, paused);
     expect(cube.state.isSolved, expected.isSolved);
     for (final cubie in expected.cubies) {
       for (final e in cubie.stickers.entries) {

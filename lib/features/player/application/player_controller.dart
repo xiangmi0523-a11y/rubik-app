@@ -90,8 +90,7 @@ class PlayerController extends Notifier<PlaybackState> {
     }
     if (state.playing) {
       _timer?.cancel();
-      _timer = Timer(
-          Duration(milliseconds: (120 / state.speed).round()), _pump);
+      _timer = Timer(playerStepGap * (1 / state.speed), _pump);
     }
   }
 

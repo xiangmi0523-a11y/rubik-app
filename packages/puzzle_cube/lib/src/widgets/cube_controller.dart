@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:vector_math/vector_math_64.dart' show Matrix4, Vector3;
 
 import '../models/cube_move.dart';
@@ -10,6 +11,7 @@ import '../models/puzzle_cube_state.dart';
 import '../rendering/cube_geometry.dart';
 import '../rendering/cube_hit_test.dart';
 import '../rendering/realistic_cube_renderer.dart';
+import '../rendering/turn_highlight.dart';
 
 /// Drives a [Cube] widget: owns the cube state, queues animated moves, and
 /// tracks the view rotation.
@@ -173,10 +175,15 @@ class Cube extends StatefulWidget {
     this.enableGestures = true,
     this.onFaceTap,
     this.onMove,
+    this.highlightTurns = false,
   });
 
   /// The controller that owns the cube state and view rotation.
   final CubeController controller;
+
+  /// Keep the turning layer bright and dim the rest while queued moves play
+  /// (see [TurnHighlight]). Off: the cube looks exactly as before.
+  final bool highlightTurns;
 
   /// Whether drag/tap gestures are handled. When false the cube is display-only.
   final bool enableGestures;
@@ -208,6 +215,12 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
   late final AnimationController _snap;
   _MovePlan? _activePlan;
 
+  final TurnHighlight _highlight = TurnHighlight();
+  late final Ticker _highlightTicker = createTicker(_onHighlightTick);
+  final _highlightRepaint = ValueNotifier<int>(0);
+  Duration _highlightLast = Duration.zero;
+  PuzzleCubeState? _shownState;
+
   // ── Drag-to-turn state ──────────────────────────────
   static const double _kDecidePx = 12;
   static const double _kSnapThreshold = math.pi / 4;
@@ -235,6 +248,7 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
           // move's animation, so resetting afterwards would clobber it and
           // stall the sequence after a single move.
           _anim.reset();
+          _highlight.end();
           widget.controller._commitPending();
         }
       });
@@ -244,6 +258,7 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
     )
       ..addListener(_onSnapTick)
       ..addStatusListener(_onSnapStatus);
+    _shownState = widget.controller.state;
     widget.controller.addListener(_onControllerChanged);
   }
 
@@ -254,22 +269,60 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
       oldWidget.controller.removeListener(_onControllerChanged);
       widget.controller.addListener(_onControllerChanged);
       _anim.duration = widget.controller.moveDuration;
+      _resetHighlight();
     }
+    if (oldWidget.highlightTurns && !widget.highlightTurns) _resetHighlight();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onControllerChanged);
+    _highlightTicker.dispose();
+    _highlightRepaint.dispose();
     _anim.dispose();
     _snap.dispose();
     super.dispose();
   }
 
+  void _resetHighlight() {
+    _highlight.reset();
+    if (_highlightTicker.isActive) _highlightTicker.stop();
+    _highlightRepaint.value++;
+  }
+
+  void _onHighlightTick(Duration elapsed) {
+    final dt = elapsed - _highlightLast;
+    _highlightLast = elapsed;
+    final changing = _highlight.tick(dt);
+    _highlightRepaint.value++;
+    if (!changing) _highlightTicker.stop();
+  }
+
   void _onControllerChanged() {
+    // A replaced state (jump, reset, scramble) shows no turn.
+    if (!identical(widget.controller.state, _shownState)) {
+      _shownState = widget.controller.state;
+      _resetHighlight();
+    }
     final move = widget.controller.pendingMove;
     if (move != null && !_anim.isAnimating) {
-      setState(() => _activePlan = _planFor(move));
+      final plan = _planFor(move);
+      setState(() => _activePlan = plan);
       _anim.duration = widget.controller.moveDuration;
+      if (widget.highlightTurns) {
+        // Exactly the cubies the painter rotates for this move.
+        _highlight.begin(
+          [
+            for (final c in widget.controller.state.cubies)
+              if (plan.inSlice(c)) (c.x, c.y, c.z),
+          ],
+          widget.controller.moveDuration,
+        );
+        if (!_highlightTicker.isActive) {
+          _highlightLast = Duration.zero;
+          _highlightTicker.start();
+        }
+      }
       _anim.forward();
     } else if (move == null) {
       setState(() => _activePlan = null);
@@ -488,7 +541,7 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final viewport = AnimatedBuilder(
-      animation: _anim,
+      animation: Listenable.merge([_anim, _highlightRepaint]),
       builder: (context, _) {
         final viewMatrix = Matrix4.identity()
           ..rotateX(widget.controller.viewRotationX)
@@ -508,11 +561,14 @@ class _CubeState extends State<Cube> with TickerProviderStateMixin {
 
         return CustomPaint(
           size: Size.infinite,
-          painter: _CubePainter(
+          painter: CubePainter(
             cubies: widget.controller.state.cubies,
             viewMatrix: viewMatrix,
             sliceMatrix: sliceMatrix,
             inSlice: inSlice,
+            brightness: widget.highlightTurns
+                ? (c) => _highlight.brightnessOf((c.x, c.y, c.z))
+                : null,
           ),
         );
       },
@@ -553,18 +609,30 @@ double cubeViewScale(Size size) =>
 
 /// Draws the cube with [RealisticCubeRenderer] using the same projection as
 /// the hit tests: perspective · scale(s, -s, -s) · view · slice.
-class _CubePainter extends CustomPainter {
-  _CubePainter({
+class CubePainter extends CustomPainter {
+  /// Creates the painter for one frame.
+  CubePainter({
     required this.cubies,
     required this.viewMatrix,
     required this.sliceMatrix,
     required this.inSlice,
+    this.brightness,
   });
 
+  /// Cubies of the cube, at their positions before the current turn.
   final List<CubieModel> cubies;
+
+  /// Camera rotation.
   final Matrix4 viewMatrix;
+
+  /// Rotation of the turning layer at this frame.
   final Matrix4 sliceMatrix;
+
+  /// Whether a cubie is in the turning layer (rotated by [sliceMatrix]).
   final bool Function(CubieModel) inSlice;
+
+  /// Light multiplier per cubie (the turn highlight); null = 1.
+  final double Function(CubieModel)? brightness;
 
   static final _renderer = RealisticCubeRenderer();
 
@@ -641,6 +709,7 @@ class _CubePainter extends CustomPainter {
         CubieDraw(
           depth: eye.transform3(Vector3.copy(center)).z,
           group: _groupOf(cubie, sliceAxis, sliceLayer),
+          brightness: brightness?.call(cubie) ?? 1,
           faces: faces,
         ),
       );
@@ -664,5 +733,5 @@ class _CubePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _CubePainter old) => true;
+  bool shouldRepaint(covariant CubePainter old) => true;
 }

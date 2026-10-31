@@ -14,6 +14,7 @@ class NxnCubePainter extends CustomPainter {
     required this.rotationX,
     required this.rotationY,
     this.turn,
+    this.brightness,
     super.repaint,
   });
 
@@ -21,6 +22,9 @@ class NxnCubePainter extends CustomPainter {
   final double rotationX;
   final double rotationY;
   final NxnTurn? turn;
+
+  /// Light multiplier per cubie position (the turn highlight); null = 1.
+  final double Function(IVec pos)? brightness;
 
   static final _renderer = RealisticCubeRenderer();
 
@@ -42,7 +46,7 @@ class NxnCubePainter extends CustomPainter {
 
     final draws = <CubieDraw>[];
     for (final c in state.cubies) {
-      final turning = turn != null && state.inLayer(c, turn.axis, turn.layer);
+      final turning = turn != null && turn.turns(c.pos);
       Vector3 world(Vector3 v) => turning ? turnMatrix!.transform3(v) : v;
       final center = NxnProjection.cubieCenter(c.pos);
 
@@ -70,7 +74,8 @@ class NxnCubePainter extends CustomPainter {
       draws.add(CubieDraw(
         depth: proj.toView(world(Vector3.copy(center))).z,
         // Slabs along the turn axis are drawn as rigid blocks, back to front.
-        group: turn == null ? 0 : (axisOf(c.pos, turn.axis) - turn.layer).sign,
+        group: turn == null ? 0 : turn.sideOf(c.pos),
+        brightness: brightness?.call(c.pos) ?? 1,
         faces: faces,
       ));
     }
