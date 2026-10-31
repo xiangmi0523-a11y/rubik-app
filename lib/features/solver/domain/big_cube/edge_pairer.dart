@@ -1,8 +1,11 @@
+import 'package:cuber/cuber.dart' as cuber;
+
 import '../../../../core/nxn/nxn_cube_state.dart';
 import '../../../../core/nxn/nxn_facelets.dart';
 import 'cycle_library.dart';
 import 'edge_layout.dart';
 import 'parity_algorithms.dart';
+import 'reduced_three.dart';
 import 'solve_step.dart';
 import 'target_scheme.dart';
 
@@ -81,6 +84,55 @@ abstract final class EdgePairer {
     return (current.length - cycles) & 1;
   }
 
+  /// Whether the reduced 3x3 of [state] with its wings moved to [target]
+  /// would have PLL parity (corner and edge permutation parities differ).
+  static bool _pllParity(NxnCubeState state, List<int> target,
+      EdgeLayout layout, TargetScheme scheme) {
+    final f = NxnFacelets(4);
+    final colors = f.read(state);
+    final wings = layout.wingSlots;
+    for (var w = 0; w < 24; w++) {
+      colors[wings[w].named] = scheme.faceColors[target[w] ~/ 6];
+      colors[wings[w].other] = scheme.faceColors[target[w] % 6];
+    }
+    final def = ReducedThree.definition(f.build(colors), scheme);
+    if (def == null) return false;
+    final cube = cuber.Cube.from(def);
+    return cube.computeCornerParity() != cube.computeEdgeParity();
+  }
+
+  /// Parity (0 even, 1 odd) of the wings' permutation away from where
+  /// pairing without a parity formula can take them: on a 4x4 the solved
+  /// arrangement (odd ⇒ OLL parity), on a 5x5 the arrangement next to the
+  /// middle edges (odd ⇒ edge parity). Null if the wings are illegal.
+  static int? wingParity(NxnCubeState state, TargetScheme scheme) {
+    final n = state.n;
+    final layout = EdgeLayout(n);
+    final f = NxnFacelets(n);
+    final ci = _colorIndex(scheme);
+    final colors = f.read(state);
+    final cur = _keys(colors, layout, ci);
+    if (cur == null || _checkWings(cur) != null) return null;
+    final target = <int>[];
+    for (final e in layout.edges) {
+      Map<int, int>? onFace;
+      if (n == 5) {
+        final (ma, mb) = e.midge!;
+        onFace = {f.faceOf[ma]: colors[ma], f.faceOf[mb]: colors[mb]};
+      }
+      for (final w in e.wings) {
+        final a = n == 5 ? ci[onFace![f.faceOf[w.named]]] : f.faceOf[w.named];
+        final b = n == 5 ? ci[onFace![f.faceOf[w.other]]] : f.faceOf[w.other];
+        if (a == null || b == null) return null;
+        target.add(a * 6 + b);
+      }
+    }
+    if (target.toSet().length != 24 || !target.toSet().containsAll(cur)) {
+      return null;
+    }
+    return _parity(cur, target);
+  }
+
   // ── 4x4 ─────────────────────────────────────────────────────────────────
 
   /// Pairs the 12 dedges of a 4x4 in place, appending steps to [steps].
@@ -89,6 +141,7 @@ abstract final class EdgePairer {
     TargetScheme scheme,
     List<SolveStep> steps, {
     required DateTime deadline,
+    bool avoidPllParity = true,
   }) {
     final layout = EdgeLayout(4);
     final f = NxnFacelets(4);
@@ -146,6 +199,47 @@ abstract final class EdgePairer {
       }
       option[bestE] = 1 - option[bestE];
       target = buildTarget();
+    }
+
+    // PLL parity is decided here: the reduced 3x3's edge permutation is the
+    // dedge assignment, its corners don't move while pairing. If they would
+    // disagree, swap the targets of two dedges (an even wing permutation, so
+    // still reachable) — the cheapest such swap.
+    if (avoidPllParity && _pllParity(state, target, layout, scheme)) {
+      List<int>? best;
+      var bestCost = 1 << 30;
+      int costOf(List<int> t) {
+        var k = 0;
+        for (var w = 0; w < 24; w++) {
+          if (cur[w] != t[w]) k++;
+        }
+        return k;
+      }
+
+      for (var e1 = 0; e1 < 12; e1++) {
+        for (var e2 = e1 + 1; e2 < 12; e2++) {
+          for (var o = 0; o < 4; o++) {
+            final saved = (dedgeAt[e1], dedgeAt[e2], option[e1], option[e2]);
+            dedgeAt[e1] = saved.$2;
+            dedgeAt[e2] = saved.$1;
+            option[e1] = o & 1;
+            option[e2] = o >> 1;
+            final t = buildTarget();
+            dedgeAt[e1] = saved.$1;
+            dedgeAt[e2] = saved.$2;
+            option[e1] = saved.$3;
+            option[e2] = saved.$4;
+            final c = costOf(t);
+            if (c >= bestCost || _parity(cur, t) != 0) continue;
+            if (_pllParity(state, t, layout, scheme)) continue;
+            best = t;
+            bestCost = c;
+          }
+        }
+      }
+      // A misplaced wing costs about 4–5 turns of 3-cycles; the PLL
+      // parity formula 6. Swap only if it costs at most one more wing.
+      if (best != null && bestCost - costOf(target) <= 1) target = best;
     }
 
     final failure = _solveWings(state, target, layout, ci, steps, deadline);

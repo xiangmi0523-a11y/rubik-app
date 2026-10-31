@@ -199,7 +199,7 @@ void main() {
         step(ReductionPhase.centers, "R 2R R'", 4),
         step(ReductionPhase.centers, "U 2R' U' F", 4),
         step(ReductionPhase.centers, "F' F2 F2", 4),
-      ]);
+      ], 4);
       // R 2R R' → 2R; then U … U' don't touch; 2R' stays apart from 2R.
       expect(out.expand((s) => s.moves).map((m) => m.notation(4)).join(' '),
           "2R U 2R' U'");
@@ -210,12 +210,85 @@ void main() {
       final out = MoveOptimizer.optimize([
         step(ReductionPhase.centers, "R U", 4),
         step(ReductionPhase.edges, "U' R'", 4),
-      ]);
+      ], 4);
       expect(out.expand((s) => s.moves), hasLength(4));
     });
 
-    test('random sequences: same cube per phase, never longer, no '
-        'adjacent same-layer turns', () {
+    test('a run becomes its fewest wide turns', () {
+      String opt(String alg, int n) => MoveOptimizer.optimize(
+              [step(ReductionPhase.centers, alg, n)], n)
+          .expand((s) => s.blocks)
+          .map((b) => b.notation(n))
+          .join(' ');
+      expect(opt('R 2R', 4), 'Rw');
+      // Two turns either way (e.g. 2-3Rw R', or 3Rw' 2-3Rw2).
+      expect(opt("R' 2R 3R", 5).split(' '), hasLength(2));
+      // Layers turned 1, 2, 1 quarter: two overlapping turns, not three.
+      final two = MoveOptimizer.optimize(
+          [step(ReductionPhase.centers, "R' 2R2 3R'", 5)], 5).single.blocks;
+      expect(two, hasLength(2));
+      expect(opt("U 2U 3U 4U 5U", 5), 'y');
+    });
+
+    test('decompose is the exact minimum (all patterns, 4x4 and 5x5)', () {
+      for (final n in [4, 5]) {
+        // Independent BFS over patterns for the true minimum.
+        final size = 1 << (2 * n);
+        final dist = List<int>.filled(size, -1)..[0] = 0;
+        var frontier = [0];
+        int add(int v, int a, int b, int q) {
+          var out = 0, mul = 1;
+          for (var i = 0; i < n; i++) {
+            var d = (v ~/ mul) % 4;
+            if (i >= a && i <= b) d = (d + q) % 4;
+            out += d * mul;
+            mul *= 4;
+          }
+          return out;
+        }
+        while (frontier.isNotEmpty) {
+          final next = <int>[];
+          for (final v in frontier) {
+            for (var a = 0; a < n; a++) {
+              for (var b = a; b < n; b++) {
+                for (var q = 1; q < 4; q++) {
+                  final w = add(v, a, b, q);
+                  if (dist[w] < 0) {
+                    dist[w] = dist[v] + 1;
+                    next.add(w);
+                  }
+                }
+              }
+            }
+          }
+          frontier = next;
+        }
+        final f = NxnFacelets(n);
+        for (var code = 0; code < size; code++) {
+          final q = [for (var i = 0; i < n; i++) (code >> (2 * i)) & 3];
+          for (final axis in [0, 1, 2]) {
+            final blocks = NxnBlockMove.decompose(n, axis, q);
+            expect(blocks, hasLength(dist[code]));
+            if (axis != 1 || code % 7 != 0) continue;
+            // Same effect as the per-layer turns (engine).
+            final a = NxnCubeState.solved(n);
+            for (final b in blocks) {
+              a.applyBlock(b);
+            }
+            final e = NxnCubeState.solved(n);
+            for (var i = 0; i < n; i++) {
+              for (var k = 0; k < q[i]; k++) {
+                e.apply(NxnMove(axis, -(n - 1) + 2 * i, 1));
+              }
+            }
+            expect(f.read(a), f.read(e));
+          }
+        }
+      }
+    });
+
+    test('random sequences: same cube per phase, never more turns, every '
+        'run minimal', () {
       final rng = math.Random(77);
       for (final n in [4, 5]) {
         final f = NxnFacelets(n);
@@ -228,16 +301,29 @@ void main() {
                 moves: randomMoves(n, rng, rng.nextInt(12)),
               ),
           ];
-          final out = MoveOptimizer.optimize(steps);
+          final out = MoveOptimizer.optimize(steps, n);
           for (final p in ReductionPhase.values) {
             final a = [for (final s in steps) if (s.phase == p) ...s.moves];
             final b = [for (final s in out) if (s.phase == p) ...s.moves];
-            expect(b.length, lessThanOrEqualTo(a.length));
+            final turns = [for (final s in out) if (s.phase == p) ...s.blocks];
+            expect(turns.length, lessThanOrEqualTo(a.length));
             expect(f.read(NxnCubeState.solved(n)..applyAll(b)),
                 f.read(NxnCubeState.solved(n)..applyAll(a)));
-            for (var k = 1; k < b.length; k++) {
-              expect(b[k].axis == b[k - 1].axis && b[k].layer == b[k - 1].layer,
-                  isFalse);
+            // Every maximal same-axis run of turns is already minimal.
+            var k = 0;
+            while (k < turns.length) {
+              var j = k;
+              final q = List<int>.filled(n, 0);
+              while (j < turns.length && turns[j].axis == turns[k].axis) {
+                for (final m in turns[j].moves) {
+                  final l = (m.layer + n - 1) ~/ 2;
+                  q[l] = (q[l] + (m.turns == 2 ? 2 : (m.turns == 1 ? 1 : 3))) % 4;
+                }
+                j++;
+              }
+              expect(q.any((x) => x != 0), isTrue);
+              expect(j - k, NxnBlockMove.decompose(n, turns[k].axis, q).length);
+              k = j;
             }
           }
           expect(out.every((s) => s.moves.isNotEmpty), isTrue);

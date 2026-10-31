@@ -2,6 +2,7 @@ import 'package:cuber/cuber.dart' as cuber;
 
 import '../../../../core/nxn/nxn_cube_state.dart';
 import '../../../../core/nxn/nxn_facelets.dart';
+import 'center_phase.dart';
 import 'center_solver.dart';
 import 'edge_layout.dart';
 import 'edge_pairer.dart';
@@ -19,6 +20,18 @@ class PhaseRange {
   final int end;
 
   int get length => end - start;
+}
+
+/// How [BigCubeSolver.solve] works.
+enum SolveStrategy {
+  /// Both strategies below; the solution with fewer turns wins.
+  best,
+
+  /// Pure commutators only (the earlier solver).
+  classic,
+
+  /// Block-turn centre search, early parity, cost-based choices.
+  search,
 }
 
 /// One player turn of a solution (see [BigCubeSolution.blockSteps]).
@@ -52,33 +65,13 @@ class BigCubeSolution {
   /// All moves, in order.
   List<NxnMove> get moves => [for (final s in steps) ...s.moves];
 
-  /// The solution as player turns: within each phase, same-axis moves with
-  /// equal turns on adjacent layers become one wide turn (e.g. U2 2U2 →
-  /// Uw2). Never crosses a phase; each turn keeps the description of the
-  /// formula its first layer came from. Same effect as [moves].
-  List<BlockStep> get blockSteps {
-    final out = <BlockStep>[];
-    var i = 0;
-    while (i < steps.length) {
-      var j = i;
-      while (j < steps.length && steps[j].phase == steps[i].phase) {
-        j++;
-      }
-      final moves = <NxnMove>[];
-      final notes = <String>[];
-      for (final s in steps.sublist(i, j)) {
-        for (final m in s.moves) {
-          moves.add(m);
-          notes.add(s.description);
-        }
-      }
-      for (final (block, first) in NxnBlockMove.groupWithSource(moves)) {
-        out.add(BlockStep(steps[i].phase, block, notes[first]));
-      }
-      i = j;
-    }
-    return out;
-  }
+  /// The solution as player turns, one per step: each step's (possibly
+  /// wide) turns, tagged with the step's phase and description. Same effect
+  /// as [moves].
+  List<BlockStep> get blockSteps => [
+        for (final s in steps)
+          for (final b in s.blocks) BlockStep(s.phase, b, s.description),
+      ];
 
   /// Contiguous move ranges per phase, in solve order (phases with no moves
   /// are left out).
@@ -112,50 +105,121 @@ abstract final class BigCubeSolver {
     NxnCubeState input, {
     Duration timeout = const Duration(seconds: 30),
     bool optimize = true,
+    SolveStrategy strategy = SolveStrategy.best,
   }) {
     final sw = Stopwatch()..start();
     final deadline = DateTime.now().add(timeout);
+    BigCubeSolution done((List<SolveStep>, SolveFailure?) r) => BigCubeSolution._(
+        n: input.n, steps: r.$1, elapsed: sw.elapsed, failure: r.$2);
+    if (input.n != 4 && input.n != 5) {
+      return done((
+        const [],
+        SolveFailure(SolveFailureKind.invalidInput, '只能求解四阶和五阶，收到 ${input.n} 阶'),
+      ));
+    }
+    // Classic first: pure commutators, fast, the result is never worse than
+    // the earlier solver. Then the block-turn search; the shorter one wins.
+    if (strategy == SolveStrategy.search) {
+      return done(_run(input, deadline, optimize, search: true));
+    }
+    final classic = _run(input, deadline, optimize, search: false);
+    if (strategy == SolveStrategy.classic ||
+        classic.$2?.kind == SolveFailureKind.invalidInput ||
+        !DateTime.now().isBefore(deadline)) {
+      return done(classic);
+    }
+    final searched = _run(input, deadline, optimize, search: true);
+    if (searched.$2 != null) return done(classic.$2 == null ? classic : searched);
+    if (classic.$2 != null) return done(searched);
+    int turns(List<SolveStep> st) => st.fold(0, (a, s) => a + s.blocks.length);
+    return done(turns(searched.$1) < turns(classic.$1) ? searched : classic);
+  }
+
+  /// One complete solve of a copy of [input]; the steps are optimized and
+  /// replayed on another fresh copy, which must come out solved.
+  static (List<SolveStep>, SolveFailure?) _run(
+    NxnCubeState input,
+    DateTime deadline,
+    bool optimize, {
+    required bool search,
+  }) {
     final state = input.copy();
     final steps = <SolveStep>[];
-    BigCubeSolution done(List<SolveStep> s, [SolveFailure? failure]) =>
-        BigCubeSolution._(n: input.n, steps: s, elapsed: sw.elapsed, failure: failure);
-
     SolveFailure? failure;
     try {
-      failure = switch (input.n) {
-        4 => _solveFour(state, steps, deadline),
-        5 => _solveFive(state, steps, deadline),
-        _ => SolveFailure(
-            SolveFailureKind.invalidInput, '只能求解四阶和五阶，收到 ${input.n} 阶'),
-      };
+      failure = input.n == 4
+          ? _solveFour(state, steps, deadline, search)
+          : _solveFive(state, steps, deadline, search);
     } on Object catch (e) {
       failure = SolveFailure(SolveFailureKind.internal, '求解出错：$e');
     }
-    if (failure != null) return done(steps, failure);
+    if (failure != null) return (steps, failure);
 
-    final result = optimize ? MoveOptimizer.optimize(steps) : steps;
+    final result = optimize ? MoveOptimizer.optimize(steps, input.n) : steps;
     final replay = input.copy();
     for (final s in result) {
       replay.applyAll(s.moves);
     }
     if (!replay.isSolved) {
-      return done(result,
-          const SolveFailure(SolveFailureKind.internal, '解法重放后魔方没有还原'));
+      return (result, const SolveFailure(SolveFailureKind.internal, '解法重放后魔方没有还原'));
     }
-    return done(result);
+    return (result, null);
+  }
+
+  /// The centre-phase candidate whose centres + edge pairing (+ parity)
+  /// take the fewest turns, found by running [pairing] on a copy of each.
+  static (CentreAttempt?, SolveFailure?) _bestAttempt(
+    NxnCubeState state,
+    TargetScheme scheme,
+    DateTime deadline,
+    SolveFailure? Function(NxnCubeState, TargetScheme, List<SolveStep>) pairing,
+  ) {
+    final options = CenterPhase.attempts(state, scheme, deadline: deadline);
+    CentreAttempt? best;
+    var bestCost = 1 << 30;
+    SolveFailure? firstFailure;
+    for (final a in options) {
+      if (a.failure != null) {
+        firstFailure ??= a.failure;
+        continue;
+      }
+      final rest = <SolveStep>[];
+      final failure = pairing(a.state!.copy(), scheme, rest);
+      if (failure != null) {
+        firstFailure ??= failure;
+        continue;
+      }
+      final cost = a.turns + rest.fold<int>(0, (t, s) => t + s.blocks.length);
+      if (cost < bestCost) {
+        best = a;
+        bestCost = cost;
+      }
+    }
+    return best == null ? (null, firstFailure) : (best, null);
   }
 
   // ── 4x4 ─────────────────────────────────────────────────────────────────
 
-  static SolveFailure? _solveFour(
-      NxnCubeState state, List<SolveStep> steps, DateTime deadline) {
+  static SolveFailure? _solveFour(NxnCubeState state, List<SolveStep> steps,
+      DateTime deadline, bool search) {
     final scheme = TargetScheme.bestFor(state, SlotKind.centerX);
     if (scheme == null) {
       return const SolveFailure(
           SolveFailureKind.invalidInput, '左后下角块颜色不合法，无法确定配色');
     }
-    return CenterOrbitSolver.solve(state, SlotKind.centerX, scheme, steps,
-            deadline: deadline, label: '中心块') ??
+    if (search) {
+      final pick = _bestAttempt(state, scheme, deadline,
+          (s, sc, rest) =>
+              EdgePairer.pairFour(s, sc, rest, deadline: deadline) ??
+              _fourParity(s, sc, rest));
+      if (pick.$2 != null) return pick.$2;
+      final failure = CenterPhase.apply(state, scheme, pick.$1!, steps);
+      if (failure != null) return failure;
+    }
+    return (search
+            ? null
+            : CenterOrbitSolver.solve(state, SlotKind.centerX, scheme, steps,
+                deadline: deadline, label: '中心块')) ??
         EdgePairer.pairFour(state, scheme, steps, deadline: deadline) ??
         _fourParity(state, scheme, steps) ??
         ReducedThree.solve(state, scheme, steps, deadline: deadline);
@@ -217,8 +281,8 @@ abstract final class BigCubeSolver {
 
   // ── 5x5 ─────────────────────────────────────────────────────────────────
 
-  static SolveFailure? _solveFive(
-      NxnCubeState state, List<SolveStep> steps, DateTime deadline) {
+  static SolveFailure? _solveFive(NxnCubeState state, List<SolveStep> steps,
+      DateTime deadline, bool search) {
     final scheme = TargetScheme.fromFixedCenters(state);
     if (scheme == null) {
       return const SolveFailure(SolveFailureKind.invalidInput, '正中心颜色不合法，无法确定配色');
@@ -240,11 +304,33 @@ abstract final class BigCubeSolver {
       return SolveFailure(
           SolveFailureKind.invalidInput, ReducedThree.statusMessage(status));
     }
-    return CenterOrbitSolver.solve(state, SlotKind.centerX, scheme, steps,
-            deadline: deadline, label: '角中心块') ??
-        CenterOrbitSolver.solve(state, SlotKind.centerT, scheme, steps,
-            deadline: deadline, label: '棱中心块') ??
-        EdgePairer.pairFive(state, scheme, steps, deadline: deadline) ??
-        ReducedThree.solve(state, scheme, steps, deadline: deadline);
+    SolveFailure? pairFive(NxnCubeState s, TargetScheme _, List<SolveStep> rest) {
+      final moved = TargetScheme.fromFixedCenters(s);
+      if (moved == null) {
+        return const SolveFailure(SolveFailureKind.internal, '拼中心后正中心配色不对');
+      }
+      return EdgePairer.pairFive(s, moved, rest, deadline: deadline);
+    }
+
+    CentreAttempt? pick;
+    if (search) {
+      final r = _bestAttempt(state, scheme, deadline, pairFive);
+      if (r.$2 != null) return r.$2;
+      pick = r.$1;
+    }
+    final centres = search
+        ? CenterPhase.apply(state, scheme, pick!, steps)
+        : CenterOrbitSolver.solve(state, SlotKind.centerX, scheme, steps,
+                deadline: deadline, label: '角中心块') ??
+            CenterOrbitSolver.solve(state, SlotKind.centerT, scheme, steps,
+                deadline: deadline, label: '棱中心块');
+    if (centres != null) return centres;
+    // Turns of the middle layers move the fixed centres (never the scheme).
+    final moved = TargetScheme.fromFixedCenters(state);
+    if (moved == null) {
+      return const SolveFailure(SolveFailureKind.internal, '拼中心后正中心配色不对');
+    }
+    return EdgePairer.pairFive(state, moved, steps, deadline: deadline) ??
+        ReducedThree.solve(state, moved, steps, deadline: deadline);
   }
 }

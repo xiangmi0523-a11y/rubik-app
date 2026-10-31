@@ -5,9 +5,12 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rubik_app/core/nxn/nxn_cube_state.dart';
 import 'package:rubik_app/core/nxn/nxn_facelets.dart';
+import 'package:rubik_app/features/player/domain/puzzle_stepper.dart'
+    show playerStepGap, playerTurnDuration;
 import 'package:rubik_app/features/solver/domain/big_cube/big_cube_solver.dart';
 import 'package:rubik_app/features/solver/domain/big_cube/cycle_library.dart';
 import 'package:rubik_app/features/solver/domain/big_cube/edge_layout.dart';
+import 'package:rubik_app/features/solver/domain/big_cube/edge_pairer.dart';
 import 'package:rubik_app/features/solver/domain/big_cube/parity_algorithms.dart';
 import 'package:rubik_app/features/solver/domain/big_cube/reduced_three.dart';
 import 'package:rubik_app/features/solver/domain/big_cube/solve_step.dart';
@@ -24,6 +27,20 @@ List<int> _slots(NxnFacelets f, Set<SlotKind> kinds) => [
     ];
 
 List<int> _pick(List<int> colors, List<int> slots) => [for (final s in slots) colors[s]];
+
+/// The physical pieces of a colouring (corners, wings, middle edges): each
+/// as its sorted colours, as a sorted list — equal for any two states that
+/// differ only by turns.
+List<String> _pieces(NxnFacelets f, List<int> colors) {
+  final byPiece = <int, List<int>>{};
+  for (var i = 0; i < f.count; i++) {
+    final k = f.kindOf[i];
+    if (k == SlotKind.corner || k == SlotKind.wing || k == SlotKind.midEdge) {
+      byPiece.putIfAbsent(f.pieceOf[i], () => []).add(colors[i]);
+    }
+  }
+  return [for (final p in byPiece.values) (p..sort()).join('-')]..sort();
+}
 
 /// Every centre sticker of each face shows one colour (and, on 5x5, the
 /// colour of the fixed centre).
@@ -61,6 +78,8 @@ List<String> _expectGoodSolve(NxnCubeState input, BigCubeSolution r, String why)
     expect(table.indexOf(m), isNonNegative, reason: why);
   }
   expect(r.steps.expand((s) => s.moves).toList(), r.moves);
+  // The turns shown by the player are exactly these layers.
+  expect([for (final t in r.blockSteps) ...t.block.moves], r.moves);
   final phases = r.phases.map((p) => p.phase).toList();
   expect(phases.toSet().length, phases.length, reason: why);
   for (var i = 1; i < phases.length; i++) {
@@ -73,26 +92,42 @@ List<String> _expectGoodSolve(NxnCubeState input, BigCubeSolution r, String why)
   final corners = _slots(f, {SlotKind.corner});
   final mids = _slots(f, {SlotKind.midEdge});
   final s = input.copy();
+  // State after the centre phase (the input if there is none): edge
+  // pairing and parity work from here and must leave corners (and 5x5
+  // middle edges) exactly as they are.
+  var afterCentres = start;
+  final hasParity = phases.contains(ReductionPhase.parity);
   for (final p in r.phases) {
     s.applyAll(r.moves.sublist(p.start, p.end));
     final c = f.read(s);
     switch (p.phase) {
       case ReductionPhase.centers:
         expect(_centresUniform(f, c), isTrue, reason: '$why: centres');
-        // Only centre stickers moved.
-        final other = _slots(f, {SlotKind.corner, SlotKind.wing, SlotKind.midEdge});
-        expect(_pick(c, other), _pick(start, other), reason: '$why: centres phase');
+        // Edges and corners may move while the centres are solved (wide
+        // turns), but they are still exactly the input's pieces.
+        expect(_pieces(f, c), _pieces(f, start), reason: '$why: same pieces');
+        // Parity is settled here: no parity formula later ⇔ even wings.
+        final scheme = n == 4
+            ? _schemeOf(input, c, f)
+            : TargetScheme.fromFixedCenters(s)!;
+        if (!hasParity) {
+          expect(EdgePairer.wingParity(s, scheme), 0, reason: '$why: parity');
+        }
+        afterCentres = c;
       case ReductionPhase.edges:
         expect(_centresUniform(f, c), isTrue, reason: '$why: edges/centres');
-        if (n == 4 || !phases.contains(ReductionPhase.parity)) {
+        if (n == 4 || !hasParity) {
           expect(layout.allPaired(c), isTrue, reason: '$why: edges');
         }
-        expect(_pick(c, corners), _pick(start, corners), reason: '$why: corners');
-        expect(_pick(c, mids), _pick(start, mids), reason: '$why: middle edges');
+        expect(_pick(c, corners), _pick(afterCentres, corners),
+            reason: '$why: corners');
+        expect(_pick(c, mids), _pick(afterCentres, mids),
+            reason: '$why: middle edges');
       case ReductionPhase.parity:
         expect(_centresUniform(f, c), isTrue, reason: '$why: parity/centres');
         expect(layout.allPaired(c), isTrue, reason: '$why: parity/edges');
-        expect(_pick(c, corners), _pick(start, corners), reason: '$why: corners');
+        expect(_pick(c, corners), _pick(afterCentres, corners),
+            reason: '$why: corners');
         final scheme = n == 4
             ? _schemeOf(input, c, f)
             : TargetScheme.fromFixedCenters(s)!;
@@ -116,7 +151,9 @@ List<String> _expectGoodSolve(NxnCubeState input, BigCubeSolution r, String why)
 void _randomRun(int n, int count, int seed) {
   final rng = math.Random(seed);
   final times = <int>[], moves = <int>[];
+  final turns = <int>[], singles = <int>[], wides = <int>[], playMs = <int>[];
   final phaseMoves = {for (final p in _order) p: <int>[]};
+  final phaseTurns = {for (final p in _order) p: <int>[]};
   final parities = <String, int>{};
   var solved = 0;
   final failures = <String>[];
@@ -143,6 +180,22 @@ void _randomRun(int n, int count, int seed) {
     for (final p in r.phases) {
       phaseMoves[p.phase]!.add(p.length);
     }
+    // Player turns (a wide turn is one step).
+    final steps = r.blockSteps;
+    final t = steps.length;
+    turns.add(t);
+    final w = steps.where((s) => s.block.width > 1).length;
+    wides.add(w);
+    singles.add(t - w);
+    // Playback at 1×: every turn animates, with a pause between turns.
+    playMs.add(t == 0
+        ? 0
+        : t * playerTurnDuration.inMilliseconds +
+            (t - 1) * playerStepGap.inMilliseconds);
+    for (final p in _order) {
+      final k = steps.where((s) => s.phase == p).length;
+      if (k > 0) phaseTurns[p]!.add(k);
+    }
   }
   String avg(List<int> l, [int div = 1]) => l.isEmpty
       ? '-'
@@ -156,19 +209,20 @@ void _randomRun(int n, int count, int seed) {
       'moves avg=${avg(moves)} max=${mx(moves)} '
       '${[for (final p in _order) '${p.name}=${avg(phaseMoves[p]!)}(${phaseMoves[p]!.length})'].join(' ')} '
       'parity=$parities');
+  // ignore: avoid_print
+  print('TURNS${n}_STATS turns avg=${avg(turns)} max=${mx(turns)} '
+      'single avg=${avg(singles)} wide avg=${avg(wides)} '
+      'wideShare=${(wides.fold(0, (a, b) => a + b) * 100 / turns.fold(0, (a, b) => a + b)).toStringAsFixed(1)}% '
+      'play1x avg=${avg(playMs, 1000)}s max=${mx(playMs, 1000)}s '
+      '${[for (final p in _order) '${p.name}=${avg(phaseTurns[p]!)}(${phaseTurns[p]!.length})'].join(' ')}');
   for (final x in failures) {
     // ignore: avoid_print
     print('FAIL $x');
   }
   expect(failures, isEmpty);
   expect(solved, count);
-  if (n == 4) {
-    // Both 4x4 parities really occur among random states.
-    expect(parities['OLL 奇偶'], greaterThan(count ~/ 5));
-    expect(parities['PLL 奇偶'], greaterThan(count ~/ 5));
-  } else {
-    expect(parities['棱块奇偶'], greaterThan(count ~/ 5));
-  }
+  // Parity formulas are mostly avoided now (decided during centres and
+  // pairing); their own paths are covered by the parity special cases.
 }
 
 NxnCubeState _from(int n, String alg) =>

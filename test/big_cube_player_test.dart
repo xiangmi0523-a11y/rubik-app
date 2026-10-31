@@ -58,7 +58,10 @@ void main() {
     }
     expect(script.phases.last.end, script.moves.length);
     expect(find.textContaining('拼中心 0/'), findsOneWidget);
-    expect(find.textContaining('中心块：'), findsOneWidget);
+    // The first step's note (the formula it belongs to) is shown, and
+    // every step has one.
+    expect(script.notes, everyElement(isNotEmpty));
+    expect(find.textContaining(script.noteAt(0)!), findsOneWidget);
 
     // Jump to each phase: the cube shows exactly the state at that point.
     for (var i = 0; i < script.phases.length; i++) {

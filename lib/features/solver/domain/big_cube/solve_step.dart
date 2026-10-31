@@ -17,11 +17,26 @@ class SolveStep {
     required this.phase,
     required this.description,
     required this.moves,
-  });
+  }) : _blocks = null;
+
+  /// A step given as (possibly wide) turns; [moves] are their layers.
+  SolveStep.turns({
+    required this.phase,
+    required this.description,
+    required List<NxnBlockMove> blocks,
+  })  : _blocks = blocks,
+        moves = [for (final b in blocks) ...b.moves];
 
   final ReductionPhase phase;
   final String description;
+
+  /// The step as single-layer moves (same effect as [blocks]).
   final List<NxnMove> moves;
+  final List<NxnBlockMove>? _blocks;
+
+  /// The step as turns, one per player step; a wide turn is one turn.
+  List<NxnBlockMove> get blocks =>
+      _blocks ?? [for (final m in moves) NxnBlockMove.single(m)];
 }
 
 /// Why a solve phase could not complete.

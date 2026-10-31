@@ -188,6 +188,27 @@ class NxnBlockMove {
   static List<NxnBlockMove> group(List<NxnMove> moves) =>
       [for (final (b, _) in groupWithSource(moves)) b];
 
+  /// The fewest block turns on [axis] of an order-[n] cube whose combined
+  /// effect turns layer i (0 = lowest, n-1 = highest) by [quarters][i]
+  /// quarter turns about +axis (mod 4). Same-axis turns commute, so any run
+  /// of them can be replaced by this. Exact minimum, from a breadth-first
+  /// search over all 4^n per-layer patterns (cached per n).
+  static List<NxnBlockMove> decompose(int n, int axis, List<int> quarters) {
+    final table = _DecomposeTable.of(n);
+    var code = 0;
+    for (var i = n - 1; i >= 0; i--) {
+      code = code * 4 + (quarters[i] % 4 + 4) % 4;
+    }
+    final out = <NxnBlockMove>[];
+    while (code != 0) {
+      final (a, b, q) = table.step[code]!;
+      out.add(NxnBlockMove(
+          axis, -(n - 1) + 2 * a, -(n - 1) + 2 * b, q == 2 ? 2 : (q == 1 ? 1 : -1)));
+      code = table.apply(code, a, b, 4 - q);
+    }
+    return out;
+  }
+
   @override
   bool operator ==(Object other) =>
       other is NxnBlockMove &&
@@ -201,6 +222,52 @@ class NxnBlockMove {
 
   @override
   String toString() => 'NxnBlockMove($axis, $from..$to, $turns)';
+}
+
+/// Breadth-first table behind [NxnBlockMove.decompose]: for every per-layer
+/// pattern (base-4 code), one interval turn on a shortest decomposition.
+class _DecomposeTable {
+  _DecomposeTable(this.n) {
+    final size = 1 << (2 * n);
+    final dist = List<int>.filled(size, -1)..[0] = 0;
+    var frontier = [0];
+    while (frontier.isNotEmpty) {
+      final next = <int>[];
+      for (final v in frontier) {
+        for (var a = 0; a < n; a++) {
+          for (var b = a; b < n; b++) {
+            for (var q = 1; q <= 3; q++) {
+              final w = apply(v, a, b, q);
+              if (dist[w] >= 0) continue;
+              dist[w] = dist[v] + 1;
+              step[w] = (a, b, q); // w = v + (a..b by q)
+              next.add(w);
+            }
+          }
+        }
+      }
+      frontier = next;
+    }
+  }
+
+  final int n;
+  final Map<int, (int, int, int)> step = {};
+
+  static final Map<int, _DecomposeTable> _cache = {};
+  static _DecomposeTable of(int n) => _cache.putIfAbsent(n, () => _DecomposeTable(n));
+
+  /// Adds [q] quarter turns to layers [a]..[b] of pattern [code].
+  int apply(int code, int a, int b, int q) {
+    var out = 0, mul = 1, c = code;
+    for (var i = 0; i < n; i++) {
+      var d = c % 4;
+      c ~/= 4;
+      if (i >= a && i <= b) d = (d + q) % 4;
+      out += d * mul;
+      mul *= 4;
+    }
+    return out;
+  }
 }
 
 class NxnCubie {
