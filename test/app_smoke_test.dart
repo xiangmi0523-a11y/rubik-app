@@ -30,7 +30,11 @@ void main() {
 
     await tester.tap(find.text('填色求解').last);
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.casino), findsOneWidget);
+    // First visit shows the hand-hold guide.
+    expect(find.text('我知道了'), findsOneWidget);
+    await tester.tap(find.text('我知道了'));
+    await tester.pumpAndSettle();
+    expect(find.text('开始求解'), findsOneWidget);
 
     await tester.tap(find.text('成绩').last);
     await tester.pumpAndSettle();

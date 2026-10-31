@@ -4,13 +4,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
 import '../../../core/cube/cube_facelets.dart';
+import '../domain/cube_input_validator.dart';
 
 class ColorInputState {
   const ColorInputState({required this.colors, required this.selected});
 
   /// 54 colours in cuber facelet order (U R F D L B).
   final List<Color> colors;
+
+  /// The colour that a tap paints.
   final Color selected;
+
+  /// How many more stickers of [color] can still be painted (9 per colour,
+  /// centres included).
+  int remaining(Color color) =>
+      9 - colors.where((c) => c.toARGB32() == color.toARGB32()).length;
+
+  int get blankCount => colors.where(CubeInputValidator.isBlank).length;
+
+  bool get isComplete => blankCount == 0;
 
   ColorInputState copyWith({List<Color>? colors, Color? selected}) =>
       ColorInputState(
@@ -26,17 +38,50 @@ class ColorInputController extends Notifier<ColorInputState> {
         selected: CubeColors.white,
       );
 
-  void select(Color color) => state = state.copyWith(selected: color);
-
-  void paint(int index) {
-    if (index % 9 == 4) return; // centres are fixed
-    final colors = [...state.colors];
-    colors[index] = state.selected;
-    state = state.copyWith(colors: colors);
+  /// Selects a colour; colours already used 9 times can't be selected.
+  void select(Color color) {
+    if (state.remaining(color) <= 0) return;
+    state = state.copyWith(selected: color);
   }
 
-  void clear() => state = state.copyWith(
+  /// Paints facelet [index] with the selected colour. Tapping a sticker that
+  /// already has that colour erases it. Returns whether anything changed.
+  bool paint(int index) {
+    if (index % 9 == 4) return false; // centres are fixed
+    final colors = [...state.colors];
+    final current = colors[index];
+    final selected = state.selected;
+
+    if (current.toARGB32() == selected.toARGB32()) {
+      colors[index] = CubeColors.colorless;
+    } else {
+      if (state.remaining(selected) <= 0) return false;
+      colors[index] = selected;
+    }
+
+    var next = state.copyWith(colors: colors);
+    // Selected colour used up -> jump to the next colour still available.
+    if (next.remaining(selected) <= 0) {
+      final available =
+          CubeColors.palette.where((c) => next.remaining(c) > 0).toList();
+      if (available.isNotEmpty) {
+        final start = CubeColors.palette.indexOf(selected);
+        final ordered = [
+          ...CubeColors.palette.skip(start + 1),
+          ...CubeColors.palette.take(start + 1),
+        ];
+        next = next.copyWith(
+          selected: ordered.firstWhere((c) => next.remaining(c) > 0),
+        );
+      }
+    }
+    state = next;
+    return true;
+  }
+
+  void clear() => state = ColorInputState(
         colors: CubeFacelets.read(PuzzleCubeState.colorless()),
+        selected: CubeColors.white,
       );
 
   /// Fills a random scrambled cube (demo / testing).
@@ -54,8 +99,8 @@ final colorInputProvider =
   ColorInputController.new,
 );
 
-/// 3D preview that mirrors the 2D net.
-final colorPreviewCubeProvider = Provider<CubeController>((ref) {
+/// The 3D cube the user paints on; mirrors [colorInputProvider].
+final colorInputCubeProvider = Provider<CubeController>((ref) {
   final controller = CubeController(
     initialState: CubeFacelets.build(ref.read(colorInputProvider).colors),
     initialViewRotationX: CubeNotation.viewRotationX,

@@ -1,7 +1,7 @@
 # 魔方 App（Flutter / iOS）
 
 - **自由玩**：3D 魔方（puzzle_cube），手指拖拽转层、空白处拖动旋转视角；打乱后转第一下自动开始计时，还原后自动停止并记录成绩；点击计时器可手动计时（实体魔方用）。
-- **填色求解**：按展开图填六面颜色 → 校验（颜色数量 / 不可能的块 / 翻棱 / 拧角 / 奇偶）→ cuber（Kociemba 两阶段算法）在后台 Isolate 求解 → 3D 动画逐步演示（播放、暂停、上一步、下一步、点击步骤跳转）。
+- **填色求解**：直接点击 3D 魔方上的色块填色（拖动旋转视角，一键切正面/背面），色板显示每种颜色剩余数量、填满 9 个自动禁用；首次进入弹出手持姿势引导 → 校验（未填完提示 / 不可能的块 / 单角翻转 / 单棱翻色 / 奇偶，不可解时弹出专门提示）→ cuber（Kociemba 两阶段算法）在后台 Isolate 求解 → 3D 动画逐步演示（播放、暂停、上一步、下一步、点击步骤跳转）。
 - **成绩**：单次成绩、最佳、平均、当前/最佳 ao5、ao12（WCA 去头尾平均），左滑删除。
 - **架构**：Riverpod 状态管理，feature-first 目录。
 
@@ -12,6 +12,7 @@ lib/
   main.dart / app.dart
   core/
     cube/cube_facelets.dart        # puzzle_cube <-> cuber 坐标与转动映射
+    cube/sticker_hit_test.dart     # 3D 点击 -> 具体贴纸（复刻 DiTreDi 投影 + 背面剔除）
     prefs/shared_prefs_provider.dart
     utils/time_format.dart
   features/

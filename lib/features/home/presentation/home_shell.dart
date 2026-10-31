@@ -4,17 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../free_play/presentation/free_play_page.dart';
 import '../../solver/presentation/color_input_page.dart';
 import '../../stats/presentation/stats_page.dart';
-
-class HomeTabNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  void select(int index) => state = index;
-}
-
-final homeTabProvider = NotifierProvider<HomeTabNotifier, int>(
-  HomeTabNotifier.new,
-);
+import '../application/home_tab_controller.dart';
 
 class HomeShell extends ConsumerWidget {
   const HomeShell({super.key});

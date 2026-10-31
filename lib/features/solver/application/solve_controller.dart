@@ -11,11 +11,13 @@ enum SolveStatus { idle, solving, invalid, done }
 class SolveState {
   const SolveState({
     this.status = SolveStatus.idle,
+    this.issue,
     this.errors = const [],
     this.result,
   });
 
   final SolveStatus status;
+  final CubeInputIssue? issue;
   final List<String> errors;
   final SolveResult? result;
 }
@@ -28,9 +30,13 @@ class SolveController extends Notifier<SolveState> {
     if (state.status == SolveStatus.solving) return;
     final colors = [...ref.read(colorInputProvider).colors];
 
-    final errors = CubeInputValidator.validate(colors);
-    if (errors.isNotEmpty) {
-      state = SolveState(status: SolveStatus.invalid, errors: errors);
+    final check = CubeInputValidator.validate(colors);
+    if (!check.isValid) {
+      state = SolveState(
+        status: SolveStatus.invalid,
+        issue: check.issue,
+        errors: check.messages,
+      );
       return;
     }
 
@@ -41,7 +47,8 @@ class SolveController extends Notifier<SolveState> {
       if (moves == null) {
         state = const SolveState(
           status: SolveStatus.invalid,
-          errors: ['求解超时或无解，请检查颜色'],
+          issue: CubeInputIssue.unsolvable,
+          errors: ['求解超时或无解'],
         );
         return;
       }
@@ -50,7 +57,11 @@ class SolveController extends Notifier<SolveState> {
         result: SolveResult(colors: colors, moves: moves),
       );
     } catch (e) {
-      state = SolveState(status: SolveStatus.invalid, errors: ['求解出错：$e']);
+      state = SolveState(
+        status: SolveStatus.invalid,
+        issue: CubeInputIssue.unsolvable,
+        errors: ['求解出错：$e'],
+      );
     }
   }
 
