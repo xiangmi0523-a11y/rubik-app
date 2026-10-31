@@ -30,6 +30,12 @@ lib/
 test/                              # 映射、校验、ao5/ao12、播放、冒烟测试
 ```
 
+## puzzle_cube 本地分支
+
+`packages/puzzle_cube` 是 puzzle_cube 0.2.1（MIT）的本地副本：数据模型、手势、校验保持原样，
+只把扁平的 DiTreDi 渲染换成了带光照、圆角高光贴纸、塑料块体和投影的 `RealisticCubeRenderer`，
+2/4/5 阶引擎也共用这套渲染。改动记录见其 CHANGELOG。
+
 ## 魔方朝向约定
 
 白色中心朝上、绿色中心朝前（红在右）。puzzle_cube 枚举名与渲染出来的面并不一致（例如它的 `u` 实际转的是画面中的底层），

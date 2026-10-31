@@ -1,0 +1,29 @@
+name: puzzle_cube
+description: An interactive 3D twisty-puzzle cube for Flutter, with a 3x3 model (turns, scrambling, validation) and a gesture-driven widget (orbit, drag-to-turn).
+version: 0.2.1
+repository: https://github.com/Absoulte-Devs/puzzle_cube
+issue_tracker: https://github.com/Absoulte-Devs/puzzle_cube/issues
+
+topics:
+  - cube
+  - puzzle
+  - three-dim
+  - widget
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ditredi: ^2.0.2
+  equatable: ^2.0.5
+  vector_math: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:

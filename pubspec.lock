@@ -291,10 +291,9 @@ packages:
   puzzle_cube:
     dependency: "direct main"
     description:
-      name: puzzle_cube
-      sha256: "96580d7f7f260b062babd140f8605664b96699b6070ef43fddc5eb6cbec179ce"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/puzzle_cube"
+      relative: true
+    source: path
     version: "0.2.1"
   riverpod:
     dependency: transitive
