@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/cube/cube_facelets.dart';
+import '../../../core/ui/app_background.dart';
 import '../../../core/nxn/nxn_cube_controller.dart';
 import '../../../core/nxn/nxn_cube_view.dart';
 import '../../../core/pyraminx/pyraminx_controller.dart';
@@ -60,9 +61,7 @@ class ColorInputPage extends ConsumerWidget {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
         title: const Text('填色求解'),
-        centerTitle: true,
         actions: [
           IconButton(
             tooltip: '手持姿势',
@@ -78,14 +77,7 @@ class ColorInputPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF26243F), Color(0xFF1C4450), Color(0xFF2B2A47)],
-          ),
-        ),
+      body: AppBackground(
         child: SafeArea(
           child: Column(
             children: [

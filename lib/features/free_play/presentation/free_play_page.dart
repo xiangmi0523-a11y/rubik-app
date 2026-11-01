@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:puzzle_cube/puzzle_cube.dart';
 
 import '../../../core/nxn/nxn_cube_view.dart';
+import '../../../core/ui/app_background.dart';
 import '../../patterns/presentation/pattern_picker_sheet.dart';
 import '../../puzzles/application/puzzle_type_controller.dart';
 import '../../puzzles/domain/puzzle_type.dart';
@@ -21,16 +22,22 @@ class FreePlayPage extends ConsumerWidget {
     final timer = ref.watch(freePlayControllerProvider);
     final notifier = ref.read(freePlayControllerProvider.notifier);
 
-    return Scaffold(
+    // The puzzle needs room: very large system text is capped on this page.
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.3,
+      child: AppBackground(
+        child: Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('自由玩'),
         actions: [
           TextButton.icon(
-              onPressed: () => showPatternPicker(context, type),
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('花式'),
-            ),
+            onPressed: () => showPatternPicker(context, type),
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('花式'),
+          ),
           PopupMenuButton<String>(
+            tooltip: '更多设置',
             onSelected: (_) =>
                 ref.read(inspectionEnabledProvider.notifier).toggle(),
             itemBuilder: (_) => [
@@ -54,21 +61,26 @@ class FreePlayPage extends ConsumerWidget {
               onPenalty: notifier.setLastPenalty,
             ),
             if (timer.scramble.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: SelectableText(
-                  timer.scramble,
-                  textAlign: TextAlign.center,
-                  maxLines: 4,
-                  style: const TextStyle(fontSize: 14, letterSpacing: 0.5),
+              // Long scrambles (5x5: 60 moves) scroll instead of squeezing
+              // the puzzle on small screens.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 62),
+                child: SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: SelectableText(
+                    timer.scramble,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13, letterSpacing: 0.4),
+                  ),
                 ),
               ),
             Expanded(child: _PuzzleArea(type: type, onMove: notifier.onCubeMove)),
             const Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Text('在魔方上拖动转层，在空白处拖动旋转视角',
-                    style: TextStyle(fontSize: 12, color: Colors.white54)),
-              ),
+              padding: EdgeInsets.only(bottom: 4),
+              child: Text('在魔方上拖动转层，在空白处拖动旋转视角',
+                  style: TextStyle(fontSize: 12, color: Colors.white54)),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
               child: Row(
@@ -81,26 +93,26 @@ class FreePlayPage extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: notifier.resetCube,
-                        icon: const Icon(Icons.restart_alt),
-                        label: const Text('复原'),
-                      ),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: notifier.resetCube,
+                      icon: const Icon(Icons.restart_alt),
+                      label: const Text('复原'),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton.outlined(
-                      tooltip: '视角复位',
-                      onPressed: () => _resetCamera(ref, type),
-                      icon: const Icon(Icons.center_focus_strong),
-                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.outlined(
+                    tooltip: '视角复位',
+                    onPressed: () => _resetCamera(ref, type),
+                    icon: const Icon(Icons.center_focus_strong),
+                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
-    );
+    )));
   }
 
   void _resetCamera(WidgetRef ref, PuzzleType type) {

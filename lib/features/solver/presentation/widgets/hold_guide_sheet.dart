@@ -72,33 +72,54 @@ class _HoldGuideState extends State<_HoldGuide> {
             ? IgnorePointer(child: NxnCubeView(controller: _nxn!))
             : IgnorePointer(child: PyraminxView(controller: _pyraminx!));
 
+    // Content scrolls when a small screen or large text leaves too little
+    // room; the button stays pinned at the bottom.
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('手持姿势',
-              textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text('请按下图拿好实体${widget.type.label}，填色过程中保持不动',
-              textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
-          Expanded(child: preview),
-          if (_hasFixedCenters) ...const [
-            _Rule(CubeColors.white, '白色中心', '朝上'),
-            _Rule(CubeColors.green, '绿色中心', '朝前（面向自己）'),
-            _Rule(CubeColors.red, '红色中心', '朝右'),
-          ] else
-            Text(
-              widget.type.isPyraminx
-                  ? '金字塔可以任意一面朝向自己，程序会根据中心块自动识别各面颜色。'
-                  : '${widget.type.label}没有固定的中心块，任意姿势拿好即可，'
-                      '程序会自动识别各面颜色。',
-              style: const TextStyle(fontSize: 15),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('手持姿势',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 4),
+                      Text('请按下图拿好实体${widget.type.label}，填色过程中保持不动',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall),
+                      SizedBox(
+                        height: (constraints.maxHeight * 0.45).clamp(120.0, 320.0),
+                        child: preview,
+                      ),
+                      if (_hasFixedCenters) ...const [
+                        _Rule(CubeColors.white, '白色中心', '朝上'),
+                        _Rule(CubeColors.green, '绿色中心', '朝前（面向自己）'),
+                        _Rule(CubeColors.red, '红色中心', '朝右'),
+                      ] else
+                        Text(
+                          widget.type.isPyraminx
+                              ? '金字塔可以任意一面朝向自己，程序会根据中心块自动识别各面颜色。'
+                              : '${widget.type.label}没有固定的中心块，任意姿势拿好即可，'
+                                  '程序会自动识别各面颜色。',
+                          style: const TextStyle(fontSize: 15),
+                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '需要看背面时，请拖动屏幕上的模型旋转视角，不要转动手里的魔方。',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          const SizedBox(height: 6),
-          Text(
-            '需要看背面时，请拖动屏幕上的模型旋转视角，不要转动手里的魔方。',
-            style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
           FilledButton(
@@ -133,11 +154,19 @@ class _Rule extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Text(label, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 8),
-          Text(
-            direction,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: const TextStyle(fontSize: 16),
+                children: [
+                  TextSpan(text: '$label  '),
+                  TextSpan(
+                    text: direction,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

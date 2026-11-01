@@ -23,15 +23,21 @@ class ColorPaletteBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        for (final color in palette) _ball(color),
-      ],
+    // Balls shrink on narrow screens (6 × 55 pt doesn't fit a 320 pt iPhone).
+    return LayoutBuilder(
+      builder: (context, c) {
+        final size = (c.maxWidth / palette.length - 11).clamp(30.0, 44.0);
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            for (final color in palette) _ball(color, size),
+          ],
+        );
+      },
     );
   }
 
-  Widget _ball(Color color) {
+  Widget _ball(Color color, double size) {
     final left = remaining(color);
     final done = left <= 0;
     final isSelected = color.toARGB32() == selected.toARGB32() && !done;
@@ -60,8 +66,8 @@ class ColorPaletteBar extends StatelessWidget {
               child: Opacity(
                 opacity: done ? 0.25 : 1,
                 child: Container(
-                  width: 44,
-                  height: 44,
+                  width: size,
+                  height: size,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: color,
@@ -73,7 +79,7 @@ class ColorPaletteBar extends StatelessWidget {
                           '$left',
                           style: TextStyle(
                             color: textColor,
-                            fontSize: 22,
+                            fontSize: size * 0.5,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

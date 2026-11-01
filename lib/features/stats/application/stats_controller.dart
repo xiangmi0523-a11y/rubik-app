@@ -46,6 +46,13 @@ class StatsController extends Notifier<List<SolveRecord>> {
     _persist();
   }
 
+  /// Puts a removed solve back (undo), in its original place by id.
+  void restore(SolveRecord record) {
+    if (state.any((r) => r.id == record.id)) return;
+    state = [...state, record]..sort((a, b) => a.id.compareTo(b.id));
+    _persist();
+  }
+
   /// Clears the solves of one puzzle.
   void clear(PuzzleType puzzle) {
     state = state.where((r) => r.puzzle != puzzle.id).toList();

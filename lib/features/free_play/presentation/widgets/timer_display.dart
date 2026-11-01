@@ -107,13 +107,19 @@ class _TimerDisplayState extends State<TimerDisplay>
       onTap: widget.onTap,
       child: Column(
         children: [
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 56,
-              fontWeight: FontWeight.w300,
-              color: color,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          Semantics(
+            button: true,
+            label: '计时器 $text',
+            excludeSemantics: true,
+            onTap: widget.onTap,
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 56,
+                fontWeight: FontWeight.w300,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
           if (s.status == TimerStatus.stopped && widget.onPenalty != null)

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/ui/app_background.dart';
 import '../application/player_controller.dart';
 import '../domain/puzzle_stepper.dart';
 
@@ -39,7 +40,11 @@ class PlayerPage extends ConsumerWidget {
       if (phase == null || total == 0) return null;
       final p = phases[phase];
       // The formula of the next move (or of the last one at the end).
-      final note = script.noteAt(playback.index < total ? playback.index : total - 1);
+      var note = script.noteAt(playback.index < total ? playback.index : total - 1);
+      // Notes often start with the phase name already shown.
+      if (note != null && note.startsWith('${p.label}：')) {
+        note = note.substring(p.label.length + 1);
+      }
       return [
         '${p.label} ${playback.index - p.start}/${p.length}',
         ?note,
@@ -47,7 +52,9 @@ class PlayerPage extends ConsumerWidget {
     }
 
     final info = detail();
-    return Scaffold(
+    return AppBackground(
+        child: Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(title: Text(title ?? '还原步骤（$total 步）')),
       body: SafeArea(
         child: Column(
@@ -130,7 +137,7 @@ class PlayerPage extends ConsumerWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -228,7 +235,9 @@ class _MoveStripState extends State<_MoveStrip> {
     final moves = widget.moves;
     final current = widget.applied == 0 ? 0 : widget.applied - 1;
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 132),
+      // Shorter on small phones, so the puzzle keeps its room.
+      constraints: BoxConstraints(
+          maxHeight: (MediaQuery.sizeOf(context).height * 0.16).clamp(72, 132)),
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Wrap(
