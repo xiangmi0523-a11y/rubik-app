@@ -21,9 +21,15 @@ class PyraminxView extends StatefulWidget {
     this.onSlotTap,
     this.moveDuration = const Duration(milliseconds: 280),
     this.highlightTurns = false,
+    this.dragEnabled = true,
   });
 
   final PyraminxController controller;
+
+  /// Whether dragging does anything (turning a part or orbiting). Off, the
+  /// view only reports taps, so a swipe can neither rotate the puzzle nor be
+  /// mistaken for a tap (the colouring page, which moves the camera itself).
+  final bool dragEnabled;
   final ValueChanged<PyraminxMove>? onMove;
   final ValueChanged<int>? onSlotTap;
   final Duration moveDuration;
@@ -271,9 +277,9 @@ class _PyraminxViewState extends State<PyraminxView>
         _size = constraints.biggest;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanStart: _onPanStart,
-          onPanUpdate: _onPanUpdate,
-          onPanEnd: _onPanEnd,
+          onPanStart: widget.dragEnabled ? _onPanStart : null,
+          onPanUpdate: widget.dragEnabled ? _onPanUpdate : null,
+          onPanEnd: widget.dragEnabled ? _onPanEnd : null,
           onTapUp: widget.onSlotTap == null ? null : _onTapUp,
           child: ListenableBuilder(
             listenable: Listenable.merge([_c, _highlightRepaint]),

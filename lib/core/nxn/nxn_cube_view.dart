@@ -20,9 +20,15 @@ class NxnCubeView extends StatefulWidget {
     this.onStickerTap,
     this.moveDuration = const Duration(milliseconds: 260),
     this.highlightTurns = false,
+    this.dragEnabled = true,
   });
 
   final NxnCubeController controller;
+
+  /// Whether dragging does anything (turning a layer or orbiting). Off, the
+  /// view only reports taps, so a swipe can neither rotate the puzzle nor be
+  /// mistaken for a tap (the colouring page, which moves the camera itself).
+  final bool dragEnabled;
 
   /// Called after a finger turn is committed.
   final ValueChanged<NxnMove>? onMove;
@@ -300,9 +306,9 @@ class _NxnCubeViewState extends State<NxnCubeView>
         _size = constraints.biggest;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanStart: _onPanStart,
-          onPanUpdate: _onPanUpdate,
-          onPanEnd: _onPanEnd,
+          onPanStart: widget.dragEnabled ? _onPanStart : null,
+          onPanUpdate: widget.dragEnabled ? _onPanUpdate : null,
+          onPanEnd: widget.dragEnabled ? _onPanEnd : null,
           onTapUp: widget.onStickerTap == null ? null : _onTapUp,
           child: ListenableBuilder(
             listenable: Listenable.merge([_c, _highlightRepaint]),

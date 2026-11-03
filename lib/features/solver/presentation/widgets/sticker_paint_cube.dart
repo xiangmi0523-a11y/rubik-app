@@ -5,7 +5,9 @@ import '../../../../core/cube/app_cube_controller.dart';
 import '../../../../core/cube/sticker_hit_test.dart';
 
 /// puzzle_cube's 3D cube where a tap reports the exact sticker (facelet index
-/// in cuber order) and a drag orbits the view.
+/// in cuber order). Dragging does nothing: the colouring page moves the
+/// camera itself, in fixed steps, so a swipe can't rotate the cube or turn a
+/// layer under the finger.
 class StickerPaintCube extends StatelessWidget {
   const StickerPaintCube({
     super.key,
@@ -32,8 +34,8 @@ class StickerPaintCube extends StatelessWidget {
             );
             if (index != null) onFaceletTap(index);
           },
-          // No onMove / onFaceTap: drags orbit the view, taps come to us.
-          child: Cube(controller: controller),
+          // Display-only cube: its own drag-to-orbit is off, taps come to us.
+          child: Cube(controller: controller, enableGestures: false),
         );
       },
     );

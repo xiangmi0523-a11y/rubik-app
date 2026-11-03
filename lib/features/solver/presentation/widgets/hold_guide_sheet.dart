@@ -112,7 +112,7 @@ class _HoldGuideState extends State<_HoldGuide> {
                         ),
                       const SizedBox(height: 6),
                       Text(
-                        '需要看背面时，请拖动屏幕上的模型旋转视角，不要转动手里的魔方。',
+                        '需要看背面时，请点击模型两侧的箭头切换视角，不要转动手里的魔方。',
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
